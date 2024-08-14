@@ -18,7 +18,7 @@ GAMMA = 0.999
 ALPHA = 0.005
 GLOBAL_N = 11
 MAX_STEPS = 500 
-EPS_DECAY = 0.92
+EPS_DECAY = 0.1
 STATE_SIZE = 23
 
 # Function to run a single episode in parallel
@@ -93,8 +93,7 @@ def main_training_loop(agent_1, agent_2, EPISODES, render_every, rendering):
 
         else:
             # Run episodes in parallel
-            # parallel_train(agent_1, agent_2, num_episodes = 20, num_processes=4, episode = episode)
-            pass
+            parallel_train(agent_1, agent_2, num_episodes = 20, num_processes=4, episode = episode)
             
         # Save the trained models every 50 episodes
         if episode % 10 == 9:

@@ -751,7 +751,7 @@ GAMMA = 0.999
 ALPHA = 0.005
 GLOBAL_N = 11
 MAX_STEPS = 500 
-EPS_DECAY = 0.95
+EPS_DECAY = 0.1
 STATE_SIZE = 23
 
 # Function to run a single episode in parallel
