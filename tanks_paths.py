@@ -1,0 +1,8 @@
+BACKGROUND = 'Tanks/images/empty_board.jpg'
+TANK_1_IMAGE = 'Tanks/images/red_tank.png'
+TANK_2_IMAGE = 'Tanks/images/green_tank.png'
+TANK_1_WEIGHTS = 'Tanks/Agents/trained_agent_1.pth'
+TANK_2_WEIGHTS = 'Tanks/Agents/trained_agent_2.pth'
+TANK_1_SAVE_WEIGHTS = 'Tanks/Agents/trained_agent_1'
+TANK_2_SAVE_WEIGHTS = 'Tanks/Agents/trained_agent_2'
+BULLET_IMAGE = 'Tanks/images/bullet.png'
