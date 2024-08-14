@@ -60,31 +60,12 @@ class TanksGame:
         dy = - tank.speed * np.sin(rad_angle) * slowdown  # Negative because Pygame's y-axis is flipped
         return dx, dy
 
-    def is_walking_on_walls(self, tank, dx, dy):
-        new_rect_x = tank.rect.copy()
-        new_rect_y = tank.rect.copy()
-        new_rect_x.x += dx
-        new_rect_y.y += dy
-        
-        collide_by_x = new_rect_x.colliderect(self.middle_block.rect)
-        collide_by_y = new_rect_y.colliderect(self.middle_block.rect)
-
-        return [collide_by_x, collide_by_y]
-
-
-
     def move(self, num_tank = 1, dx = 0, dy = 0):
         if num_tank == 1 :
-          is_walking_on_walls = self.is_walking_on_walls(self.tank_1, dx, dy)
-          if not is_walking_on_walls[0] :
             self.position_1[0] += dx
-          if not is_walking_on_walls[1] :
             self.position_1[1] += dy
         elif num_tank == 2 :
-          is_walking_on_walls = self.is_walking_on_walls(self.tank_2, dx, dy)
-          if not is_walking_on_walls[0] :
             self.position_2[0] += dx
-          if not is_walking_on_walls[1] :
             self.position_2[1] += dy 
 
     def strafe_left(self, num_tank):
@@ -111,11 +92,24 @@ class TanksGame:
             position[0] = np.clip(position[0], 30, SCREEN_WIDTH - 30)# restrain position[0] between 0 and SCREEN_WIDTH
             position[1] = np.clip(position[1], 30, SCREEN_HEIGHT - 30)
 
-            x_pos = position[0] 
-            y_pos = position[1]
+            x_top_left, y_top_left = self.middle_block.rect.topleft
+            x_bottom_right, y_bottom_right = self.middle_block.rect.bottomright
 
+            # Clip position to avoid the block
+            if x_top_left <= position[0] <= x_bottom_right and position[1] <= y_top_left:
+                position[1] = np.clip(position[1], 30, y_top_left - 10)
+
+            elif x_top_left <= position[0] <= x_bottom_right and position[1] >= y_bottom_right:
+                position[1] = np.clip(position[1], y_bottom_right + 10, SCREEN_HEIGHT - 30)
+
+            elif y_top_left <= position[1] <= y_bottom_right and position[0] <= x_top_left:
+                position[0] = np.clip(position[0], 30, x_top_left - 10)
+
+            elif y_top_left <= position[1] <= y_bottom_right and position[0] >= x_bottom_right:
+                position[0] = np.clip(position[0], x_bottom_right + 10, SCREEN_WIDTH - 30)
+            
             # Mettre à jour la position du rectangle du tank
-            tank.rect.center = x_pos, y_pos
+            tank.rect.center = position[0] , position[1]
 
 
     def fire_bullet(self, num_tank):
@@ -237,6 +231,14 @@ class TanksGame:
 
         is_reloaded = tank.check_cooldown(current_time = time.time())
 
+        # Calculate relative opponent position
+        relative_position = opponent_position - position  # Translate to ally tank's position
+        angle_rad = np.radians(-direction)  # Convert ally tank's direction to radians (negative for rotation)
+        rotation_matrix = np.array([
+            [np.cos(angle_rad), -np.sin(angle_rad)],
+            [np.sin(angle_rad), np.cos(angle_rad)]
+        ])
+        relative_position = np.dot(rotation_matrix, relative_position)  # Rotate to ally tank's orientation
 
         # Get laser distances and convert to a NumPy array for division
         laser_distances = np.array(self.get_all_laser_distances(800)[num_tank - 1])
@@ -246,7 +248,7 @@ class TanksGame:
             [direction / 360] ,           # Direction (Size : 1)
             [health / 100] ,              # Health (Size : 1)
 
-            opponent_position / 800,      # 0pponent position (Size : 2)
+            relative_position / 800,      # Relative 0pponent position (Size : 2)
             [opponent_direction / 360],   # Opponent Direction (Size : 1)
             [opponent_health / 100] ,     # Opponent Health (Size : 1)
 
@@ -370,6 +372,8 @@ class TanksGame:
     
     def draw_text(self, tank, num_tank, epsilon = None):
         score_font = pygame.font.Font(pygame.font.get_default_font(), 14)
+        background_color = (161, 155, 88)  # White semi-transparent background
+
         if num_tank == 1 :
             score_text = score_font.render(f"[Tank 1] Current reward : {tank.total_reward}", True, (0, 0, 0))
             score_rect = score_text.get_rect()
@@ -378,14 +382,19 @@ class TanksGame:
             score_text = score_font.render(f"[Tank 2] Current reward : {tank.total_reward}", True, (0, 0, 0))
             score_rect = score_text.get_rect()
             score_rect.topright = (SCREEN_WIDTH -10, 10)
+
+        # Draw background rectangle behind the text
+        pygame.draw.rect(self.screen, background_color, score_rect.inflate(10, 10))
         self.screen.blit(score_text, score_rect)
 
         if epsilon is not None :
-            score_text = score_font.render(f"Randomness : {epsilon*100:.1f}%", True, (0, 0, 0))
-            score_rect = score_text.get_rect()
-            score_rect.topleft = (SCREEN_WIDTH // 2-50, 10)
-        
-        self.screen.blit(score_text, score_rect)
+            epsilon_text = score_font.render(f"Randomness: {epsilon*100:.1f}%", True, (0, 0, 0))
+            epsilon_rect = epsilon_text.get_rect()
+            epsilon_rect.topleft = (SCREEN_WIDTH // 2 - 50, 10)
+            
+            # Draw background rectangle behind the epsilon text
+            pygame.draw.rect(self.screen, background_color, epsilon_rect.inflate(10, 10))
+            self.screen.blit(epsilon_text, epsilon_rect)
 
     def minimal_render(self, rendering):
         if rendering :
@@ -509,7 +518,7 @@ if True:
             game.fire_bullet(num_tank = 2)
         
         if keys[pygame.K_g]:
-            print(game.get_state(num_tank = 1))
+            print(game.get_state(num_tank = 1)[4:6])
 
         # Check for bullet hits
         game.check_bullet_collisions()
