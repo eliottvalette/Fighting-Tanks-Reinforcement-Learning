@@ -466,7 +466,7 @@ Press s to get the state.
 Don't forget to reset it as False, otherwise the training will fail
 """
 
-if True:
+if False:
     # Initialize Pygame
     pygame.init()
 
