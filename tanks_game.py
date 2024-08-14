@@ -6,7 +6,7 @@ import random as rd
 import time
 
 from tanks_game_objects import Background, TankPlayer, Bullet, Block
-from tanks_paths import BACKGROUND, TANK_1_IMAGE, TANK_2_IMAGE, BULLET_IMAGE
+from tanks_paths import BACKGROUND, TANK_1_IMAGE, TANK_2_IMAGE, BULLET_IMAGE, CRATE_IMAGE
 
 
 SCREEN_WIDTH = 1000
@@ -24,14 +24,14 @@ class TanksGame:
         self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
         self.screen_dims = [SCREEN_WIDTH, SCREEN_HEIGHT]
         self.clock  = pygame.time.Clock()
-        self.position_1 = [100, 100]
+        self.position_1 = [100, 180]
         self.tank_1 = TankPlayer(image_file = TANK_1_IMAGE, location = self.position_1, width = TANK_SIZE, speed = TANK_SPEED)
         self.tank_1.rotate(- 30) 
-        self.position_2 = [SCREEN_WIDTH - 100, SCREEN_HEIGHT - 100 ]
+        self.position_2 = [SCREEN_WIDTH - 100, SCREEN_HEIGHT - 180 ]
         self.tank_2 = TankPlayer(image_file = TANK_2_IMAGE, location = self.position_2, width = TANK_SIZE, speed = TANK_SPEED)
-        self.tank_2.rotate(150) 
+        self.tank_2.rotate(155) 
 
-        self.middle_block = Block(location=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2), width=BLOCK_SIZE, height=BLOCK_SIZE * 2)
+        self.middle_block = Block(image_file = CRATE_IMAGE, location=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2), width=BLOCK_SIZE, height=BLOCK_SIZE * 2)
 
     def reset(self):
         self.position_1 = [100, 100]
@@ -348,8 +348,8 @@ class TanksGame:
     def draw_hitboxes(self, draw = False):
         if draw :
             # Draw hitboxes around the tanks
-            pygame.draw.rect(self.screen, (255, 0, 0), self.tank_1.rect, 2)  # Red hitbox for tank 1
-            pygame.draw.rect(self.screen, (0, 255, 0), self.tank_2.rect, 2)  # Green hitbox for tank 2
+            pygame.draw.rect(self.screen, (161, 155, 88), self.tank_1.rect, 2)  # desert hitbox for tank 1
+            pygame.draw.rect(self.screen, (41, 79, 23), self.tank_2.rect, 2)  # Green hitbox for tank 2
 
     def draw_laser(self, tank, position, laser_distances, num_tank):
         laser_angles = [0, 20, 45, 90, 135, 180, 225, 270, 315, 340]
@@ -363,19 +363,19 @@ class TanksGame:
                 position[1] + distance * math.sin(angle_rad),
             )
             if num_tank == 1:
-                color = (255, 0, 0)
+                color = (161, 155, 88)
             else :
-                color = (0, 255, 0) 
+                color = (41, 79, 23) 
             pygame.draw.line(self.screen, color, start_pos, end_pos, 2)
     
     def draw_text(self, tank, num_tank, epsilon = None):
         score_font = pygame.font.Font(pygame.font.get_default_font(), 14)
         if num_tank == 1 :
-            score_text = score_font.render(f"[Tank 1] Current reward : {tank.total_reward}", True, (255, 0, 0))
+            score_text = score_font.render(f"[Tank 1] Current reward : {tank.total_reward}", True, (0, 0, 0))
             score_rect = score_text.get_rect()
             score_rect.topleft = (10, 10)
         else :
-            score_text = score_font.render(f"[Tank 2] Current reward : {tank.total_reward}", True, (0, 255, 0))
+            score_text = score_font.render(f"[Tank 2] Current reward : {tank.total_reward}", True, (0, 0, 0))
             score_rect = score_text.get_rect()
             score_rect.topright = (SCREEN_WIDTH -10, 10)
         self.screen.blit(score_text, score_rect)

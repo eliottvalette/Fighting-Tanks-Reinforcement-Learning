@@ -79,10 +79,10 @@ class Bullet(pygame.sprite.Sprite):
         return self.rect.colliderect(target_rect)
 
 class Block(pygame.sprite.Sprite):
-    def __init__(self, location, width, height):
+    def __init__(self, image_file, location, width, height):
         pygame.sprite.Sprite.__init__(self)
-        self.image = pygame.Surface((width, height))
-        self.image.fill((128, 128, 128))  # Grey color for the block
+        self.image = pygame.image.load(image_file)
+        self.image = pygame.transform.scale(self.image, (width, height))
         self.rect = self.image.get_rect()
         self.rect.center = location
 
