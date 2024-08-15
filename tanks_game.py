@@ -95,7 +95,7 @@ class TanksGame:
             x_top_left, y_top_left = self.middle_block.rect.topleft
             x_bottom_right, y_bottom_right = self.middle_block.rect.bottomright
 
-            # Clip position to avoid the block
+            # Clip position to avoid the block, clip is obviously not the best choice but i find it more visual
             if x_top_left <= position[0] <= x_bottom_right and position[1] <= y_top_left:
                 position[1] = np.clip(position[1], 30, y_top_left - 10)
 
@@ -108,7 +108,7 @@ class TanksGame:
             elif y_top_left <= position[1] <= y_bottom_right and position[0] >= x_bottom_right:
                 position[0] = np.clip(position[0], x_bottom_right + 10, SCREEN_WIDTH - 30)
             
-            # Mettre à jour la position du rectangle du tank
+            # Update tank position
             tank.rect.center = position[0] , position[1]
 
 
@@ -210,26 +210,53 @@ class TanksGame:
         
         return [distances_tank_1, distances_tank_2]
 
-
-
-
-    def get_state(self, num_tank):
+    def get_angle_to_opponent(self, num_tank):
         tank = getattr(self, f'tank_{num_tank}')
         position = np.array(getattr(self, f'position_{num_tank}'))
+        
+        opponent_position = np.array(getattr(self, f'position_{3 - num_tank}'))
+
+        # Calculate relative position
+        delta_x = opponent_position[0] - position[0]
+        delta_y = opponent_position[1] - position[1]
+
+        # Calculate angle of the line / Arctan2(x,y) computes the angle for any point in the 2D plane. This means it can return values from -pi to pi, covering all four quadrants.
+        angle_to_opponent = np.degrees(np.arctan2(delta_y, delta_x))
+
+        # Calculate the relative angle with respect to the ally tank's direction
+        relative_angle = (angle_to_opponent + tank.direction) % 360
+
+        return relative_angle
+
+    def standardize(self, value, mean, std):
+        return (value - mean) / std
+
+    def normalize(self, value, max_value):
+        return value / max_value
+
+    def get_state(self, num_tank):
+        # Retrieve tank and opponent details
+        tank = getattr(self, f'tank_{num_tank}')
+        opponent_tank = getattr(self, f'tank_{3 - num_tank}')
+
+        position = np.array(getattr(self, f'position_{num_tank}'))
+        opponent_position = np.array(getattr(self, f'position_{3 - num_tank}'))
+
         health = tank.health
         direction = tank.direction
-
-        opponent_tank = getattr(self, f'tank_{3 - num_tank}')
-        opponent_position = np.array(getattr(self, f'position_{3 - num_tank}'))
         opponent_health = opponent_tank.health
         opponent_direction = opponent_tank.direction
-        
+
+        relative_angle_toward_opponent = self.get_angle_to_opponent(num_tank)
         ammo = tank.number_of_ammo
         in_sight = tank.in_line_of_sight
         close_right = tank.on_close_right
         close_left = tank.on_close_left
+        is_reloaded = tank.check_cooldown(current_time=time.time())
 
-        is_reloaded = tank.check_cooldown(current_time = time.time())
+        distance_to_opponent = np.linalg.norm(opponent_position - position)
+        distance_to_block = np.linalg.norm(position - np.array(self.middle_block.rect.center))
+
 
         # Calculate relative opponent position
         relative_position = opponent_position - position  # Translate to ally tank's position
@@ -240,25 +267,63 @@ class TanksGame:
         ])
         relative_position = np.dot(rotation_matrix, relative_position)  # Rotate to ally tank's orientation
 
-        # Get laser distances and convert to a NumPy array for division
+        # Get laser distances
         laser_distances = np.array(self.get_all_laser_distances(800)[num_tank - 1])
 
+        # Define means, stds, and max values
+        means = {
+            "position": np.array([400, 400]),
+            "direction": 180,
+            "opponent_direction": 180,
+            "relative_angle": 180,
+        }
+
+        stds = {
+            "position": np.array([400, 400]),
+            "direction": 180,
+            "opponent_direction": 180,
+            "relative_angle": 180,
+        }
+
+        maxs = {
+            "relative_position": np.array([800, 800]),
+            "health": 100,
+            "opponent_health": 100,
+            "ammo": 1000,
+            "laser_distances": LASER_MAX_SIZE,
+        }
+
+        # Standardize/Normalize each feature
+        position_standardized           = self.standardize(position, means["position"], stds["position"])
+        direction_standardized          = self.standardize(direction, means["direction"], stds["direction"])
+        opponent_direction_standardized = self.standardize(opponent_direction, means["opponent_direction"], stds["opponent_direction"])
+        relative_angle_standardized     = self.standardize(relative_angle_toward_opponent, means["relative_angle"], stds["relative_angle"])
+        
+        relative_position_normalized    = self.normalize(relative_position, maxs["relative_position"])
+        health_normalized          = self.normalize(health, maxs["health"])
+        opponent_health_normalized = self.normalize(opponent_health, maxs["opponent_health"])
+        ammo_normalized            = self.normalize(ammo, maxs["ammo"])
+        laser_distances_normalized = self.normalize(laser_distances, maxs["laser_distances"])
+        distance_normalized        = self.normalize(distance_to_opponent, np.linalg.norm([SCREEN_WIDTH, SCREEN_HEIGHT]))
+        distance_block_normalized  = self.normalize(distance_to_block, np.linalg.norm([SCREEN_WIDTH, SCREEN_HEIGHT]))
+
+
         state = np.concatenate([
-            position / 800,               # Position (Size : 2)
-            [direction / 360] ,           # Direction (Size : 1)
-            [health / 100] ,              # Health (Size : 1)
-
-            relative_position / 800,      # Relative 0pponent position (Size : 2)
-            [opponent_direction / 360],   # Opponent Direction (Size : 1)
-            [opponent_health / 100] ,     # Opponent Health (Size : 1)
-
-            [ammo / 10] ,                 # Ammo count (Size : 1)
-            laser_distances / 800,        # Laser distances (Size : 10)
-            [close_left],                 # Close Right Boolean (Size : 1)
-            [in_sight],                   # In Sight Boolean (Size : 1)
-            [close_right],                # Close Right Boolean (Size : 1)
-            [is_reloaded],                # Is Reloaded Boolean (Size : 1)
-            
+            position_standardized,              # Standardized Position (Size: 2)
+            [direction_standardized],           # Standardized Direction (Size: 1)
+            [health_normalized],                # Normalized Health (Size: 1)
+            relative_position_normalized,       # Normalized Relative Opponent Position (Size: 2)
+            [opponent_direction_standardized],  # Standardized Opponent Direction (Size: 1)
+            [opponent_health_normalized],       # Normalized Opponent Health (Size: 1)
+            [relative_angle_standardized],      # Standardized Relative Angle to Opponent (Size: 1)
+            [distance_normalized],               # Normalized Distance to opponent (Size: 1)
+            [distance_block_normalized],        # Normalized Distance to block (Size: 1)
+            [ammo_normalized],                  # Normalized Ammo count (Size: 1)
+            laser_distances_normalized,         # Normalized Laser distances (Size: 10)
+            [close_left],                       # Close Left Boolean (Size: 1)
+            [in_sight],                         # In Sight Boolean (Size: 1)
+            [close_right],                      # Close Right Boolean (Size: 1)
+            [is_reloaded],                      # Is Reloaded Boolean (Size: 1)
         ])
 
         return state
@@ -518,7 +583,7 @@ if False:
             game.fire_bullet(num_tank = 2)
         
         if keys[pygame.K_g]:
-            print(game.get_state(num_tank = 1)[4:6])
+            print(game.get_state(num_tank = 1))
 
         # Check for bullet hits
         game.check_bullet_collisions()

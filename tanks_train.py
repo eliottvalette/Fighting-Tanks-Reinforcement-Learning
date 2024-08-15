@@ -18,8 +18,8 @@ GAMMA = 0.999
 ALPHA = 0.005
 GLOBAL_N = 11
 MAX_STEPS = 500 
-EPS_DECAY = 0.1
-STATE_SIZE = 23
+EPS_DECAY = 0.9
+STATE_SIZE = 26
 
 # Function to run a single episode in parallel
 def run_episode(agent_1, agent_2, epsilon, rendering, episode = 0):
@@ -108,7 +108,7 @@ if __name__ == "__main__":
         action_sizes=[3, 3, 3, 2], # [move, rotate, strafe, fire]
         gamma = GAMMA,
         learning_rate = ALPHA,
-        load_model = True,
+        load_model = False,
     )
 
     agent_2 = TanksAgent(
@@ -116,7 +116,7 @@ if __name__ == "__main__":
         action_sizes=[3, 3, 3, 2], # [move, rotate, strafe, fire]
         gamma = GAMMA,
         learning_rate = ALPHA,
-        load_model = True,
+        load_model = False,
     )
 
     if agent_1.load_model:
