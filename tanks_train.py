@@ -128,4 +128,4 @@ if __name__ == "__main__":
         agent_2.model.load_state_dict(torch.load(TANK_1_WEIGHTS))
 
     # Start the training loop
-    main_training_loop(agent_1, agent_2, EPISODES=100, render_every=1, rendering = True)
+    main_training_loop(agent_1, agent_2, EPISODES=100, render_every=2, rendering = True)

@@ -72,11 +72,11 @@ class TanksGame:
             self.position_2[1] += dy 
 
     def strafe_left(self, num_tank):
-        dx, dy = self.calculate_movement(num_tank, angle_offset=90, slowdown = 0.3) # don't strafe as fast as forward movement
+        dx, dy = self.calculate_movement(num_tank, angle_offset=90, slowdown = 0.3) # Strafe very slowly (30% of the speed)
         self.move(num_tank, dx, dy)
 
     def strafe_right(self, num_tank):
-        dx, dy = self.calculate_movement(num_tank, angle_offset=-90, slowdown = 0.3) # don't strafe as fast as forward movement
+        dx, dy = self.calculate_movement(num_tank, angle_offset=-90, slowdown = 0.3)
         self.move(num_tank, dx, dy)
 
     def move_forward(self, num_tank):
@@ -84,7 +84,7 @@ class TanksGame:
         self.move(num_tank, dx, dy)
 
     def move_backward(self, num_tank):
-        dx, dy = self.calculate_movement(num_tank, slowdown = 0.6) # don't go backward as fast as forward movement
+        dx, dy = self.calculate_movement(num_tank, slowdown = 0.6) # Go backward slowly (60% of the speed)
         self.move(num_tank, -dx, -dy)
     
     def update_tank_position(self):
@@ -98,7 +98,7 @@ class TanksGame:
             x_top_left, y_top_left = self.middle_block.rect.topleft
             x_bottom_right, y_bottom_right = self.middle_block.rect.bottomright
 
-            # Clip position to avoid the block, clip is obviously not the best choice but i find it more visual
+            # Clip position to avoid the block, clip is obviously not the best choice but I found it more visual
             if x_top_left <= position[0] <= x_bottom_right and position[1] <= y_top_left:
                 position[1] = np.clip(position[1], 30, y_top_left - 30)
 
@@ -133,7 +133,7 @@ class TanksGame:
             tank.bullets.add(bullet)
             tank.cooldown = current_time  # Reset the cooldown only if the bullet is fired
     
-    def check_bullet_collisions(self):
+    def check_bullet_collisions(self): # Collisions with tanks and blocks
         tanks = [self.tank_1, self.tank_2]
         for i, tank in enumerate(tanks):
             for bullet in tank.bullets:
@@ -143,7 +143,7 @@ class TanksGame:
                 elif bullet.block and bullet.rect.colliderect(bullet.block.rect):
                     self.handle_block_collision(bullet)
     
-    def update_bullets(self):
+    def update_bullets(self): # In case of going OOB
         for tank in [self.tank_1, self.tank_2]:
             for bullet in tank.bullets:
                 bullet.update()
@@ -151,7 +151,7 @@ class TanksGame:
                     tank.bullets.remove(bullet)
 
 
-    def handle_block_collision(self, bullet):
+    def handle_block_collision(self, bullet): # Remove the bullet from the sprite.Group
         bullet.kill()
         print("Bullet hit the block!")
         
@@ -172,10 +172,10 @@ class TanksGame:
         angle_rad = math.radians(direction)
 
         for distance in range(1, max_distance + 1):
-            ray_x = x + distance * math.cos(angle_rad)
+            ray_x = x + distance * math.cos(angle_rad) # this is the point, at the end of the ray [tank]-------* 
             ray_y = y + distance * math.sin(angle_rad)
 
-            # Check if the ray hits a border (assuming a rectangular map)
+            # Check if the ray hits a border
             if ray_x < 0 or ray_y < 0 or ray_x >= SCREEN_WIDTH or ray_y >= SCREEN_HEIGHT:
                 return distance
             
@@ -537,7 +537,7 @@ Press s to get the state.
 Don't forget to reset it as False, otherwise the training will fail
 """
 
-if True:
+if False:
     # Initialize Pygame
     pygame.init()
 

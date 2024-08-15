@@ -33,7 +33,7 @@ class TanksAgent(nn.Module):
     def get_actions(self, state, epsilon):
         if rd.random() <= epsilon:
             actions = [rd.randint(0,action_size - 1) for action_size in self.action_sizes]
-            return actions
+            return actions # [int, int, int, int]
         
         state = torch.FloatTensor(state)
 
@@ -45,10 +45,10 @@ class TanksAgent(nn.Module):
         actions = []
         for i in range(len(self.action_sizes)):
             q_values_for_action = q_values[i]  # Extract Q-values for this particular action
-            best_action = torch.argmax(q_values_for_action).item()
+            best_action = torch.argmax(q_values_for_action).item() 
             actions.append(best_action)
         
-        return actions
+        return actions # [int, int, int, int]
     
     def train_model(self, state, action, reward, next_state, done):
         state = torch.FloatTensor(state)
@@ -60,14 +60,14 @@ class TanksAgent(nn.Module):
         q_values = self.forward(state)
         next_q_values = self.forward(next_state)
 
-        target_q_values = reward.repeat(len(self.action_sizes))
+        target_q_values = reward.repeat(len(self.action_sizes)) # 4 actions but same reward for each [reward, reward, reward, reward]
 
         # Calculate current Q-value for the taken actions
         current_q_values = torch.stack([q_values[i][action[i]] for i in range(len(self.action_sizes))])
 
         for i in range(len(self.action_sizes)):
             max_next_q_value = torch.max(next_q_values[i])  # Max Q-value for the next state in this action space
-            target_q_values += (1 - done) * self.gamma * max_next_q_value
+            target_q_values += (1 - done) * self.gamma * max_next_q_value # Bellman's Equation 
 
         # Compute loss
         loss = self.loss_fn(current_q_values, target_q_values)

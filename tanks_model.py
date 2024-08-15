@@ -16,7 +16,7 @@ class TanksModel(nn.Module):
         self.fire_layer = nn.Linear(32, action_sizes[3])
     
     def forward(self, state):
-        x = self.shared_net(state).to(next(self.parameters()).device)
+        x = self.shared_net(state)
         q_values_movement = self.movement_layer(x)
         q_values_rotation = self.rotation_layer(x)
         q_values_strafe = self.strafe_layer(x)
