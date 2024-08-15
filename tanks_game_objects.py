@@ -4,11 +4,10 @@ import numpy as np
 import random as rd
 import time
 
-BULLET_COOLDOWN_TIME = 0.2
-BULLET_SPEED = 30
+BULLET_COOLDOWN_TIME = 0.75
+BULLET_SPEED = 10
 TANK_HEALTH = 100
 TANK_AMMO = 1000
-
 
 class Background(pygame.sprite.Sprite):
     def __init__(self, image_file, location, width, height):
@@ -37,6 +36,7 @@ class TankPlayer(pygame.sprite.Sprite):
         self.number_of_ammo = TANK_AMMO
         self.reward = 0
         self.total_reward = 0
+        self.was_hit = False
         
     def rotate(self, angle):
         self.direction += angle
@@ -45,10 +45,7 @@ class TankPlayer(pygame.sprite.Sprite):
         self.rect = self.image.get_rect(center=self.rect.center)
     
     def check_cooldown(self, current_time):
-        is_reloaded = current_time - self.cooldown > BULLET_COOLDOWN_TIME
-        if is_reloaded : # bullet will be shot, so reset cooldwon
-            self.cooldown = time.time()
-        return is_reloaded
+        return current_time - self.cooldown > BULLET_COOLDOWN_TIME
 
 class Bullet(pygame.sprite.Sprite):
     def __init__(self, image_file, location, direction, width, screen_dims, block=None):

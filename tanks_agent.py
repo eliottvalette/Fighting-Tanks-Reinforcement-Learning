@@ -32,7 +32,8 @@ class TanksAgent(nn.Module):
 
     def get_actions(self, state, epsilon):
         if rd.random() <= epsilon:
-            return [rd.randint(0,action_size - 1) for action_size in self.action_sizes]
+            actions = [rd.randint(0,action_size - 1) for action_size in self.action_sizes]
+            return actions
         
         state = torch.FloatTensor(state)
 
