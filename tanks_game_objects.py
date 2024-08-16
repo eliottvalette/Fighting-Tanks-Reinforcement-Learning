@@ -5,7 +5,7 @@ import random as rd
 import time
 
 BULLET_COOLDOWN_TIME = 0.75
-BULLET_SPEED = 10
+BULLET_SPEED = 30
 TANK_HEALTH = 100
 TANK_AMMO = 1000
 
@@ -18,7 +18,7 @@ class Background(pygame.sprite.Sprite):
         self.rect.left, self.rect.top = location
 
 class TankPlayer(pygame.sprite.Sprite):
-    def __init__(self, image_file, location, width, speed = 1):
+    def __init__(self, image_file, location, width, speed):
         pygame.sprite.Sprite.__init__(self)
         self.original_image = pygame.image.load(image_file).convert_alpha()
         self.original_image = pygame.transform.scale(self.original_image, (2 * width, width))

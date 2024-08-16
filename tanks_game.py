@@ -11,13 +11,13 @@ from tanks_paths import BACKGROUND, TANK_1_IMAGE, TANK_2_IMAGE, BULLET_IMAGE, CR
 
 SCREEN_WIDTH = 1000
 SCREEN_HEIGHT = 700
-TANK_1_SPEED = 15 # Tank 1 is faster
-TANK_2_SPEED = 10
-ROTATION_ANGLE_1 = 4 # But rotates slower
-ROTATION_ANGLE_2 = 6
-TANK_SIZE = 50
-BULLET_DAMAGE = 10
-BLOCK_SIZE = 120
+TANK_1_SPEED = 5 # Tank 1 is faster
+TANK_2_SPEED = 3
+ROTATION_ANGLE_1 = 1 # But rotates slower
+ROTATION_ANGLE_2 = 2
+TANK_SIZE = 70
+BULLET_DAMAGE = 25
+BLOCK_SIZE = 100
 LASER_MAX_SIZE = int(np.sqrt(SCREEN_WIDTH ** 2 + SCREEN_HEIGHT ** 2))
 background = Background(image_file = BACKGROUND, location = [0,0], width = SCREEN_WIDTH, height = SCREEN_HEIGHT)
 
@@ -29,19 +29,19 @@ class TanksGame:
         self.clock  = pygame.time.Clock()
         self.position_1 = [100, 180]
         self.tank_1 = TankPlayer(image_file = TANK_1_IMAGE, location = self.position_1, width = TANK_SIZE, speed = TANK_1_SPEED)
-        self.tank_1.rotate(- 30) 
-        self.position_2 = [SCREEN_WIDTH - 100, SCREEN_HEIGHT - 180 ]
+        self.tank_1.rotate(-30) 
+        self.position_2 = [SCREEN_WIDTH - 100, SCREEN_HEIGHT - 180]
         self.tank_2 = TankPlayer(image_file = TANK_2_IMAGE, location = self.position_2, width = TANK_SIZE, speed = TANK_2_SPEED)
-        self.tank_2.rotate(155) 
+        self.tank_2.rotate(150)
 
         self.middle_block = Block(image_file = CRATE_IMAGE, location=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2), width=BLOCK_SIZE, height=BLOCK_SIZE * 2)
 
     def reset(self):
-        self.position_1 = [100, 100]
-        self.tank_1 = TankPlayer(image_file = TANK_1_IMAGE, location = self.position_1, width = 50, speed = 3)
-        self.tank_1.rotate(- 30) 
-        self.position_2 = [SCREEN_WIDTH - 100, SCREEN_HEIGHT - 100 ]
-        self.tank_2 = TankPlayer(image_file = TANK_2_IMAGE, location = self.position_2, width = 50, speed = 3)
+        self.position_1 = [100, 180]
+        self.tank_1 = TankPlayer(image_file = TANK_1_IMAGE, location = self.position_1, width = TANK_SIZE, speed = TANK_1_SPEED)
+        self.tank_1.rotate(-30) 
+        self.position_2 = [SCREEN_WIDTH - 100, SCREEN_HEIGHT - 180 ]
+        self.tank_2 = TankPlayer(image_file = TANK_2_IMAGE, location = self.position_2, width = TANK_SIZE, speed = TANK_2_SPEED)
         self.tank_2.rotate(150) 
 
 
@@ -153,7 +153,6 @@ class TanksGame:
 
     def handle_block_collision(self, bullet): # Remove the bullet from the sprite.Group
         bullet.kill()
-        print("Bullet hit the block!")
         
     def handle_collision(self, bullet, tank, num_tank):
         tank.health -= BULLET_DAMAGE
@@ -228,7 +227,7 @@ class TanksGame:
         angle_to_opponent = np.degrees(np.arctan2(delta_y, delta_x))
 
         # Calculate the relative angle with respect to the ally tank's direction
-        relative_angle = (angle_to_opponent + tank.direction) % 360
+        relative_angle = (angle_to_opponent + tank.direction + 180) % 360 # +180 in order to normalize it
 
         return relative_angle
 
@@ -297,7 +296,7 @@ class TanksGame:
             "laser_distances": LASER_MAX_SIZE,
         }
 
-        # Standardize/Normalize each feature
+        # Standardize / Normalize each feature
         position_standardized           = self.standardize(position, means["position"], stds["position"])
         direction_standardized          = self.standardize(direction, means["direction"], stds["direction"])
         opponent_direction_standardized = self.standardize(opponent_direction, means["opponent_direction"], stds["opponent_direction"])
@@ -315,23 +314,29 @@ class TanksGame:
         state = np.concatenate([
             position_standardized,              # Standardized Position (Size: 2)
             [direction_standardized],           # Standardized Direction (Size: 1)
-            [health_normalized],                # Normalized Health (Size: 1)
+            # [health_normalized],                # Normalized Health (Size: 1)
             relative_position_normalized,       # Normalized Relative Opponent Position (Size: 2)
-            [opponent_direction_standardized],  # Standardized Opponent Direction (Size: 1)
-            [opponent_health_normalized],       # Normalized Opponent Health (Size: 1)
+            # [opponent_direction_standardized],  # Standardized Opponent Direction (Size: 1)
+            # [opponent_health_normalized],       # Normalized Opponent Health (Size: 1)
             [relative_angle_standardized],      # Standardized Relative Angle to Opponent (Size: 1)
             [distance_normalized],              # Normalized Distance to opponent (Size: 1)
             [distance_block_normalized],        # Normalized Distance to block (Size: 1)
-            [ammo_normalized],                  # Normalized Ammo count (Size: 1)
-            laser_distances_normalized,         # Normalized Laser distances (Size: 10)
+            # [ammo_normalized],                  # Normalized Ammo count (Size: 1)
+            laser_distances_normalized[[0, 1, 9]],         # Normalized Laser distances (Size: 10)
             [close_left],                       # Close Left Boolean (Size: 1)
             [in_sight],                         # In Sight Boolean (Size: 1)
             [close_right],                      # Close Right Boolean (Size: 1)
-            [is_reloaded],                      # Is Reloaded Boolean (Size: 1)
+            # [is_reloaded],                      # Is Reloaded Boolean (Size: 1)
         ])
 
         return state
 
+    def is_head_against_the_wall(self, laser_distances):
+        right = laser_distances[0] < 0.075
+        middle = laser_distances[1] < 0.06
+        left = laser_distances[-1] < 0.075
+        return right and middle and left
+    
     def step(self, actions, num_tank):
         tank = getattr(self, f'tank_{num_tank}')
         position = getattr(self, f'position_{num_tank}')
@@ -343,6 +348,7 @@ class TanksGame:
         move_action, rotate_action, strafe_action, fire_action = actions
 
         previous_distance_between_them = np.linalg.norm(np.array(position) - np.array(opponent_position))
+        previous_relative_angle_toward_opponent = abs(self.get_angle_to_opponent(num_tank) / 180 - 1)
         
         if move_action == 0:
             self.move_forward(num_tank)
@@ -363,52 +369,53 @@ class TanksGame:
             self.fire_bullet(num_tank)
 
         new_distance_between = np.linalg.norm(np.array(position) - np.array(opponent_position))
+        new_relative_angle_toward_opponent = abs(self.get_angle_to_opponent(num_tank) / 180 - 1)
 
-        # Always run the update and collision logic
         self.update_bullets()  # Ensure bullets are updated every step
         self.check_bullet_collisions()  # Ensure collisions are checked every step
 
+        laser_distances = np.array(self.get_all_laser_distances(800)[num_tank - 1])/800
+
         if self.lost(tank):
-            tank.reward -= 300  # Penalty for losing
+            tank.reward -= 50  # Penalty for losing
             done = True
         elif self.lost(opponent_tank):
-            tank.reward += 1000  # Big reward for winning
+            tank.reward += 100  # Big reward for winning
             done = True
         else:
             done = False
-            if new_distance_between <  previous_distance_between_them :
-                tank.reward += 0
+            if new_distance_between <  previous_distance_between_them : # Reward if the tanks got closer
+                tank.reward += 6
             else :
-                tank.reward -= 0
+                tank.reward -= 3
+            
+            if new_relative_angle_toward_opponent < previous_relative_angle_toward_opponent : 
+                tank.reward += 4
+            else :
+                tank.reward -= 2
+
+            if self.is_head_against_the_wall(laser_distances) and 1 not in [tank.in_line_of_sight, tank.on_close_right, tank.on_close_left]:
+                tank.reward -= 10  # Discourage bumping his head on the wall
 
             if opponent_tank.was_hit :
-                tank.reward += 500  # Reward for hitting the opponent
+                tank.reward += 50  # Reward for hitting the opponent
                 opponent_tank.was_hit = False
 
             if tank.was_hit :
-                tank.reward -= 100  # Penalty for getting hit
+                tank.reward -= 20  # Penalty for getting hit
                 tank.was_hit = False
 
             if tank.in_line_of_sight:
-                tank.reward += 5  # Encourage aiming at the opponent
+                tank.reward += 10  # Encourage aiming at the opponent
             
             if tank.on_close_right or tank.on_close_left:
                 tank.reward += 2  # Encourage aiming close to the opponent
 
             if fire_action == 0 and tank.in_line_of_sight:
-                tank.reward += 40 # reward fire action in sight
-            
-            elif fire_action == 0 and (tank.on_close_right or tank.on_close_left):
-                tank.reward += 6 # reward fire action close sight
-             
-            elif fire_action == 0 :
-                tank.reward += 2 # rencourage fire action
-            
+                tank.reward += 50 # Reward fire action in sight
 
             if tank.number_of_ammo == 0:
                 tank.reward -= 60  # Penalty for running out of ammo
-        
-        tank.reward -= 3 # force them to do something
 
         tank.total_reward += tank.reward
         return self.get_state(num_tank), tank.reward, done, {}
@@ -421,8 +428,8 @@ class TanksGame:
     def draw_hitboxes(self, draw = False):
         if draw :
             # Draw hitboxes around the tanks
-            pygame.draw.rect(self.screen, (161, 155, 88), self.tank_1.rect, 2)  # desert hitbox for tank 1
-            pygame.draw.rect(self.screen, (41, 79, 23), self.tank_2.rect, 2)  # Green hitbox for tank 2
+            pygame.draw.rect(self.screen, (161, 155, 88), self.tank_1.rect, 2)  # Desert hitbox for tank 1
+            pygame.draw.rect(self.screen, (41, 79, 23), self.tank_2.rect, 2)    # Green hitbox for tank 2
 
     def draw_laser(self, tank, position, laser_distances, num_tank):
         laser_angles = [0, 20, 45, 90, 135, 180, 225, 270, 315, 340]
@@ -439,6 +446,8 @@ class TanksGame:
                 color = (161, 155, 88)
             else :
                 color = (41, 79, 23) 
+            if (i == 0 and tank.in_line_of_sight) or (i == 1 and tank.on_close_right) or (i == 9 and tank.on_close_left):
+                    color = (255, 0, 0)
             pygame.draw.line(self.screen, color, start_pos, end_pos, 2)
     
     def draw_text(self, tank, num_tank, epsilon = None):
@@ -589,12 +598,13 @@ if False:
             game.fire_bullet(num_tank = 2)
         
         if keys[pygame.K_g]:
-            print(game.get_state(num_tank = 1))
+            print('state 1 :, ', game.get_state(num_tank = 1))
+            print('state 2 :, ', game.get_state(num_tank = 2))
 
         # Check for bullet hits
         game.check_bullet_collisions()
 
         # Render everything
-        game.render(rendering=True, clock=100)
+        game.render(rendering=True, clock=300)
 
         pygame.display.flip()

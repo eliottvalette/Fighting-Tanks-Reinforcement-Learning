@@ -21,7 +21,7 @@ class TanksAgent(nn.Module):
         self.model = self.build_model()
 
         self.optimizer = optim.Adam(self.model.parameters(), lr=self.learning_rate)
-        self.loss_fn = nn.SmoothL1Loss(beta=1.0)
+        self.loss_fn = nn.MSELoss()
         self.load_model = load_model
 
     def build_model(self):
