@@ -29,5 +29,4 @@ class TanksModel(nn.Module):
         q_values_rotation = self.rotation_layer(x_2)
         q_values_strafe = self.strafe_layer(x_3)
         q_values_fire = self.fire_layer(x_4)
-        
         return q_values_movement, q_values_rotation, q_values_strafe, q_values_fire
