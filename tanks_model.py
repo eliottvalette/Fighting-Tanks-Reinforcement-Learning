@@ -16,26 +16,18 @@ class TanksModel(nn.Module):
         )
         
         self.movement_layer = nn.Sequential(
-            nn.Linear(32, 32),
-            nn.ReLU(),
             nn.Linear(32, action_sizes[0])
         )
         
         self.rotation_layer = nn.Sequential(
-            nn.Linear(32, 32),
-            nn.ReLU(),
             nn.Linear(32, action_sizes[1])
         )
         
         self.strafe_layer = nn.Sequential(
-            nn.Linear(32, 32),
-            nn.ReLU(),
             nn.Linear(32, action_sizes[2])
         )
         
         self.fire_layer = nn.Sequential(
-            nn.Linear(32, 32),
-            nn.ReLU(),
             nn.Linear(32, action_sizes[3])
         )
     

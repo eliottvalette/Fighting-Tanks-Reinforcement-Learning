@@ -75,44 +75,17 @@ def run_episode(agent_1, agent_2, epsilon, rendering, episode=0, steps_before_up
 
     return total_reward_1, total_reward_2, steps
 
-# Parallel execution
-def parallel_train(agent_1, agent_2, num_episodes=10, num_processes=4, episode = 0):
-    pool = mp.Pool(processes=num_processes)
-    results = []
-
-    for _ in range(num_episodes):
-        epsilon = np.clip(EPS_DECAY ** episode, 0.01, 0.75)
-        results.append(pool.apply_async(run_episode, args=(agent_1, agent_2, epsilon, False, episode)))
-
-    # Close the pool and wait for the processes to complete
-    pool.close()
-    pool.join()
-
-    # Gather results
-    rewards_1 = [result.get()[0] for result in results]
-    rewards_2 = [result.get()[1] for result in results]
-    steps = [result.get()[2] for result in results]
-
-    print(f"Average Reward Agent 1: {np.mean(rewards_1)}")
-    print(f"Average Reward Agent 2: {np.mean(rewards_2)}")
-    print(f"Average Steps: {np.mean(steps)}")
-
 # Main Training Loop
-def main_training_loop(agent_1, agent_2, EPISODES, render_every, rendering):
+def main_training_loop(agent_1, agent_2, EPISODES, rendering):
     for episode in range(EPISODES):
         epsilon = np.clip(EPS_DECAY ** episode, 0.01, 0.75)
-        if episode % render_every == 0:
-            # Render this episode for visualization
-            total_reward_1, total_reward_2, steps = run_episode(agent_1, agent_2, epsilon, rendering, episode)
+        
+        total_reward_1, total_reward_2, steps = run_episode(agent_1, agent_2, epsilon, rendering, episode)
 
-            agent_1.replay()
-            agent_2.replay()
+        agent_1.replay()
+        agent_2.replay()
 
-            print(f'Episode: {episode + 1}, Total Reward Agent 1: {total_reward_1}, Total Reward Agent 2: {total_reward_2}, Steps: {steps}')
-
-        else:
-            # Run episodes in parallel
-            parallel_train(agent_1, agent_2, num_episodes = 20, num_processes=4, episode = episode)
+        print(f'Episode: {episode + 1}, Total Reward Agent 1: {total_reward_1}, Total Reward Agent 2: {total_reward_2}, Steps: {steps}')
 
         # Save the trained models every 50 episodes
         if episode % 10 == 9:
@@ -144,4 +117,4 @@ if __name__ == "__main__":
         agent_2.model.load_state_dict(torch.load(TANK_2_WEIGHTS))
 
     # Start the training loop
-    main_training_loop(agent_1, agent_2, EPISODES=100, render_every=5, rendering = RENDERING)
+    main_training_loop(agent_1, agent_2, EPISODES=100, rendering = RENDERING)
