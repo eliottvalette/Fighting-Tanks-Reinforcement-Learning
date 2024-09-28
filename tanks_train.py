@@ -1,7 +1,6 @@
 # tanks_train.py
 import numpy as np
 import random as rd
-import multiprocessing as mp
 import pygame
 import torch
 import time
@@ -19,6 +18,17 @@ GLOBAL_N = 11
 MAX_STEPS = 500 
 EPS_DECAY = 0.95
 STATE_SIZE = 21
+
+def set_seed(seed=42):
+    rd.seed(seed)
+    np.random.seed(seed)
+    
+    torch.manual_seed(seed)
+    if torch.backends.mps.is_available():
+        torch.mps.manual_seed(seed)
+    
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
 
 # Function to run a single episode
 def run_episode(agent_1, agent_2, epsilon, rendering, episode, render_every):
@@ -61,10 +71,10 @@ def main_training_loop(agent_1, agent_2, EPISODES, rendering, render_every = 10)
         
         total_reward_1, total_reward_2, steps = run_episode(agent_1, agent_2, epsilon, rendering, episode, render_every)
 
-        #agent_1.replay()
-        #agent_2.replay()
+        # agent_1.replay()
+        # agent_2.replay()
 
-        print(f'Episode: {episode + 1}, Total Reward Agent 1: {total_reward_1:.2f}, Total Reward Agent 2: {total_reward_2:.2f}, Steps: {steps}')
+        print(f'Episode: {episode + 1}, Total Reward Agent 1: {total_reward_1:.2f}, Total Reward Agent 2: {total_reward_2:.2f}, Steps: {steps}, Randomness: {epsilon:.2%}')
 
         # Save the trained models every 50 episodes
         if episode % 50 == 49:
@@ -73,13 +83,16 @@ def main_training_loop(agent_1, agent_2, EPISODES, rendering, render_every = 10)
 
 
 if __name__ == "__main__":
+    # Set seed for reproducibility
+    set_seed(42)
+
     # Create the Q-learning agent
     agent_1 = TanksAgent(
         state_size=STATE_SIZE,
         action_sizes=[3, 3, 3, 2], # [move, rotate, strafe, fire]
         gamma = GAMMA,
         learning_rate = ALPHA,
-        load_model = False,
+        load_model = True,
     )
 
     agent_2 = TanksAgent(
@@ -87,15 +100,15 @@ if __name__ == "__main__":
         action_sizes=[3, 3, 3, 2], # [move, rotate, strafe, fire]
         gamma = GAMMA,
         learning_rate = ALPHA,
-        load_model = False,
+        load_model = True,
     )
 
     if agent_1.load_model:
         print("Loading model 1 weights...")
-        agent_1.model.load_state_dict(torch.load(TANK_1_WEIGHTS, map_location = 'cpu'))
+        agent_1.model.load_state_dict(torch.load(TANK_1_WEIGHTS, weights_only=True))
     if agent_2.load_model:
         print("Loading model 2 weights...")
-        agent_2.model.load_state_dict(torch.load(TANK_2_WEIGHTS, map_location = 'cpu'))
+        agent_2.model.load_state_dict(torch.load(TANK_2_WEIGHTS, weights_only=True))
 
     # Start the training loop
-    main_training_loop(agent_1, agent_2, EPISODES=100, rendering = RENDERING, render_every = 20)
+    main_training_loop(agent_1, agent_2, EPISODES=100, rendering = RENDERING, render_every = 10)

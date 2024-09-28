@@ -8,7 +8,7 @@ import torch.optim as optim
 from tanks_model import TanksModel
 
 device = torch.device("mps") if torch.backends.mps.is_available() else torch.device("cpu")
-device = 'cpu'
+# device = 'cpu'
 
 class TanksAgent(nn.Module):
     def __init__(self, state_size, action_sizes, gamma, learning_rate, load_model = False):
@@ -77,7 +77,7 @@ class TanksAgent(nn.Module):
         # Compute loss for each action dimension separately
         for i in range(len(self.action_sizes)):
             # Get current Q-value for the taken action
-            current_q_value = q_values[i][action[i]]
+            current_q_value = q_values[i][action[i]].unsqueeze(0)
 
             # Get max Q-value for next state
             max_next_q_value = torch.max(next_q_values[i])
