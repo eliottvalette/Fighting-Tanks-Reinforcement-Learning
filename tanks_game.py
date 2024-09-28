@@ -16,8 +16,8 @@ TANK_2_SPEED = 3
 ROTATION_ANGLE_1 = 1 # But rotates slower
 ROTATION_ANGLE_2 = 2
 TANK_SIZE = 70
-BULLET_DAMAGE = 100
-BLOCK_SIZE = 25
+BULLET_DAMAGE = 10
+BLOCK_SIZE = 100
 LASER_MAX_SIZE = int(np.sqrt(SCREEN_WIDTH ** 2 + SCREEN_HEIGHT ** 2))
 
 background = Background(image_file = BACKGROUND, location = [0,0], width = SCREEN_WIDTH, height = SCREEN_HEIGHT, rendering = RENDERING)
@@ -38,7 +38,7 @@ class TanksGame:
 
         self.last_laser_update = time.time()
         self.laser_update_interval = 0.1  # Adjust this interval based on your needs
-        self.cached_laser_distances = [[0, 0, 0], [0, 0, 0]]  # Initial cache for laser distances
+        self.cached_laser_distances = [[0, 0, 0, 0, 0], [0, 0, 0, 0, 0]]  # Initial cache for laser distances
 
         self.middle_block = Block(image_file=CRATE_IMAGE, location=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2), width=BLOCK_SIZE, height=BLOCK_SIZE * 2, rendering=RENDERING)
 
@@ -100,24 +100,25 @@ class TanksGame:
             tank = getattr(self, f'tank_{i}')
             position = getattr(self, f'position_{i}')  
 
-            position[0] = np.clip(position[0], 30, SCREEN_WIDTH - 30)# restrain position[0] between 0 and SCREEN_WIDTH
-            position[1] = np.clip(position[1], 30, SCREEN_HEIGHT - 30)
+            tank_width = TANK_SIZE //2 
+            position[0] = np.clip(position[0], tank_width, SCREEN_WIDTH - tank_width) # restrain position[0] between 0 and SCREEN_WIDTH (minus half of the tank width)
+            position[1] = np.clip(position[1], tank_width, SCREEN_HEIGHT - tank_width)
 
             x_top_left, y_top_left = self.middle_block.rect.topleft
             x_bottom_right, y_bottom_right = self.middle_block.rect.bottomright
 
-            # Clip position to avoid the block, clip is obviously not the best choice but I found it more visual
+            # Clip position to avoid the block, clip is obviously not the best choice but I found it more visual and functional
             if x_top_left <= position[0] <= x_bottom_right and position[1] <= y_top_left:
-                position[1] = np.clip(position[1], 30, y_top_left - 30)
+                position[1] = np.clip(position[1], tank_width, y_top_left - tank_width)
 
             if x_top_left <= position[0] <= x_bottom_right and position[1] >= y_bottom_right:
-                position[1] = np.clip(position[1], y_bottom_right + 30, SCREEN_HEIGHT - 30)
+                position[1] = np.clip(position[1], y_bottom_right + tank_width, SCREEN_HEIGHT - tank_width)
 
             if y_top_left <= position[1] <= y_bottom_right and position[0] <= x_top_left:
-                position[0] = np.clip(position[0], 30, x_top_left - 30)
+                position[0] = np.clip(position[0], tank_width, x_top_left - tank_width)
 
             if y_top_left <= position[1] <= y_bottom_right and position[0] >= x_bottom_right:
-                position[0] = np.clip(position[0], x_bottom_right + 30, SCREEN_WIDTH - 30)
+                position[0] = np.clip(position[0], x_bottom_right + tank_width, SCREEN_WIDTH - tank_width)
             
             # Update tank position
             tank.rect.center = position[0] , position[1]
@@ -213,7 +214,7 @@ class TanksGame:
     def get_all_laser_distances(self, max_distance):
         current_time = time.time()
         if current_time - self.last_laser_update > self.laser_update_interval:
-            directions = [0, 20, 340]
+            directions = [0, 20, 90, 270, 340]
             self.cached_laser_distances = [
                 [self.cast_laser(direction - self.tank_1.direction, max_distance, 1) for direction in directions],
                 [self.cast_laser(direction - self.tank_2.direction, max_distance, 2) for direction in directions]
@@ -356,7 +357,7 @@ class TanksGame:
         new_distance_between = np.linalg.norm(np.array(position) - np.array(opponent_position))
         new_relative_angle_toward_opponent = abs(self.get_angle_to_opponent(num_tank) / 180 - 1)
 
-        self.update_bullets()  # Ensure bullets are updated every step
+        self.update_bullets()           # Ensure bullets are updated every step
         self.check_bullet_collisions()  # Ensure collisions are checked every step
 
         laser_distances = np.array(self.get_all_laser_distances(LASER_MAX_SIZE)[num_tank - 1])/LASER_MAX_SIZE
@@ -364,9 +365,9 @@ class TanksGame:
         # Reward for reducing the distance to the opponent while maintaining an optimal range
         optimal_distance = 200
         if abs(new_distance_between - optimal_distance) < abs(previous_distance_between - optimal_distance):
-            tank.reward += 6
+            tank.reward += 0.1
         else:
-            tank.reward -= 4
+            tank.reward -= 0.05
 
         # Reward for reducing the angle difference with the opponent
         if new_relative_angle_toward_opponent < previous_relative_angle_toward_opponent:
@@ -431,7 +432,7 @@ class TanksGame:
             pygame.draw.rect(self.screen, (41, 79, 23), self.tank_2.rect, 2)    # Green hitbox for tank 2
 
     def draw_laser(self, tank, position, laser_distances, num_tank):
-        laser_angles = [0, 20, 340]
+        laser_angles = [0, 20, 90, 270, 340]
         for i, direction in enumerate(laser_angles):
             laser_angle = direction  # save laser angle value
             direction -= tank.direction
@@ -452,11 +453,11 @@ class TanksGame:
         background_color = (161, 155, 88)  # White semi-transparent background
 
         if num_tank == 1:
-            score_text = score_font.render(f"[Tank 1] Current reward : {tank.total_reward} Health = {tank.health} %", True, (0, 0, 0))
+            score_text = score_font.render(f"[Tank 1] Current reward : {tank.total_reward:.2f} Health = {tank.health}%", True, (0, 0, 0))
             score_rect = score_text.get_rect()
             score_rect.topleft = (10, 10)
         else:
-            score_text = score_font.render(f"[Tank 2] Current reward : {tank.total_reward} Health = {tank.health} %", True, (0, 0, 0))
+            score_text = score_font.render(f"[Tank 2] Current reward : {tank.total_reward:.2f} Health = {tank.health}%", True, (0, 0, 0))
             score_rect = score_text.get_rect()
             score_rect.topright = (SCREEN_WIDTH - 10, 10)
 

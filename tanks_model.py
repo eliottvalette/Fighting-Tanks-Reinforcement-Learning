@@ -8,11 +8,8 @@ class TanksModel(nn.Module):
         super(TanksModel, self).__init__()
         self.shared_net = nn.Sequential(
             nn.Linear(state_size, 128), 
-            nn.ReLU(),
             nn.Linear(128, 64),         
-            nn.ReLU(),
             nn.Linear(64, 32),           
-            nn.ReLU(),
         )
         
         self.movement_layer = nn.Sequential(
@@ -33,6 +30,8 @@ class TanksModel(nn.Module):
     
     def forward(self, state):
         x = self.shared_net(state)
+
+        # print(f"Shared net output min: {x.min():.2f}, max: {x.max():.2f}")
 
         q_values_movement = self.movement_layer(x)
         q_values_rotation = self.rotation_layer(x)
