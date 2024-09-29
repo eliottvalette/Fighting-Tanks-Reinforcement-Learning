@@ -223,17 +223,31 @@ class TanksGame:
         return self.cached_laser_distances
 
     def get_angle_to_opponent(self, num_tank):
+        # Get tank and opponent positions
         tank = getattr(self, f'tank_{num_tank}')
         opponent_position = getattr(self, f'position_{3 - num_tank}')
         position = getattr(self, f'position_{num_tank}')
 
-        # Calculate relative position and angle in one step
-        delta_x, delta_y = opponent_position[0] - position[0], opponent_position[1] - position[1]
-        angle_to_opponent = np.degrees(math.atan2(delta_y, delta_x))  # Faster than np.arctan2
+        # Calculate the vector from tank to opponent
+        vector_to_opponent = np.array(opponent_position) - np.array(position)
 
-        # Calculate relative angle with respect to the tank's direction
-        relative_angle = (angle_to_opponent - tank.direction + 360) % 360
-        return relative_angle
+        # Normalize the vector
+        vector_to_opponent = vector_to_opponent / np.linalg.norm(vector_to_opponent)
+
+        # Get the facing direction of the tank as a unit vector
+        rad_angle = np.radians(tank.direction)
+        facing_vector = np.array([np.cos(rad_angle), -np.sin(rad_angle)])  # -sin because of the flipped y-axis in Pygame
+
+        # Calculate the angle between the facing vector and the vector to the opponent
+        dot_product = np.dot(facing_vector, vector_to_opponent)
+        angle = np.arccos(np.clip(dot_product, -1.0, 1.0))  # Clip to avoid numerical issues
+
+        # Determine the sign of the angle by checking the cross product
+        cross_product = facing_vector[0] * vector_to_opponent[1] - facing_vector[1] * vector_to_opponent[0]
+        if cross_product < 0:
+            angle = -angle  # Adjust sign based on relative orientation
+
+        return angle
 
 
     def standardize(self, value, mean, std):
@@ -249,14 +263,13 @@ class TanksGame:
             "position": np.array([SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2]),  # Assuming the middle of the screen
             "direction": 180,  # Middle of 0-360 range
             "opponent_direction": 180,  # Middle of 0-360 range
-            "relative_angle": 180,  # Middle of 0-360 range
         }
 
         stds = {
             "position": np.array([SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2]),  # Assuming range is 0-SCREEN_WIDTH or SCREEN_HEIGHT
             "direction": 180,  # Assuming range 0-360
             "opponent_direction": 180,  # Assuming range 0-360
-            "relative_angle": 180,  # Assuming range 0-360
+            "relative_angle": np.pi,
         }
 
         maxs = {
@@ -304,7 +317,7 @@ class TanksGame:
             self.normalize(relative_position, maxs["relative_position"]),
             [self.standardize(opponent_direction, means["opponent_direction"], stds["opponent_direction"])],
             [self.normalize(opponent_health, maxs["opponent_health"])],
-            [self.standardize(relative_angle_toward_opponent, means["relative_angle"], stds["relative_angle"])],
+            [self.normalize(relative_angle_toward_opponent, stds["relative_angle"])],
             [self.normalize(distance_to_opponent, maxs["distance_to_opponent"])],
             [self.normalize(distance_to_block, maxs["distance_to_block"])],
             [self.normalize(ammo, maxs["ammo"])],
@@ -365,9 +378,9 @@ class TanksGame:
         # Reward for reducing the distance to the opponent while maintaining an optimal range
         optimal_distance = 200
         if abs(new_distance_between - optimal_distance) < abs(previous_distance_between - optimal_distance):
-            tank.reward += 0.1
+            tank.reward += 3
         else:
-            tank.reward -= 0.05
+            tank.reward -= 2
 
         # Reward for reducing the angle difference with the opponent
         if new_relative_angle_toward_opponent < previous_relative_angle_toward_opponent:
@@ -381,7 +394,7 @@ class TanksGame:
         tank.reward -= int(wall_proximity_penalty * 10)  # Tune the multiplier as needed
 
         if self.is_head_against_the_wall(laser_distances):
-            tank.reward -= 15  # Penalty for bumping into the wall
+            tank.reward -= 5  # Penalty for bumping into the wall
 
         if opponent_tank.was_hit:
             tank.reward += 50  # Large reward for hitting the opponent
@@ -575,8 +588,10 @@ if __name__ == "__main__":
             game.fire_bullet(num_tank = 2)
         
         if keys[pygame.K_g]:
+            print()
             print('state 1 :, ', game.get_state(num_tank = 1))
             print('state 2 :, ', game.get_state(num_tank = 2))
+            time.sleep(0.1)
 
         # Check for bullet hits
         game.check_bullet_collisions()

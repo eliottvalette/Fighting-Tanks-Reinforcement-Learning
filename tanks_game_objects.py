@@ -7,7 +7,7 @@ from no_pygame_optimization import Rect
 from tanks_paths import RENDERING
 
 BULLET_COOLDOWN_TIME = 0.75
-BULLET_SPEED = 30
+BULLET_SPEED = 15
 TANK_HEALTH = 100
 TANK_AMMO = 1000
 

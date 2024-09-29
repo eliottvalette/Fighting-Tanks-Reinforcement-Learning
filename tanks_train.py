@@ -92,7 +92,7 @@ if __name__ == "__main__":
         action_sizes=[3, 3, 3, 2], # [move, rotate, strafe, fire]
         gamma = GAMMA,
         learning_rate = ALPHA,
-        load_model = True,
+        load_model = False,
     )
 
     agent_2 = TanksAgent(
@@ -100,7 +100,7 @@ if __name__ == "__main__":
         action_sizes=[3, 3, 3, 2], # [move, rotate, strafe, fire]
         gamma = GAMMA,
         learning_rate = ALPHA,
-        load_model = True,
+        load_model = False,
     )
 
     if agent_1.load_model:
