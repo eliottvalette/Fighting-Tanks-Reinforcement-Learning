@@ -92,6 +92,10 @@ class TanksAgent(nn.Module):
         # Backpropagation
         self.optimizer.zero_grad()
         total_loss.backward()
+
+        # Apply gradient clipping
+        torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
+
         self.optimizer.step()
     
 

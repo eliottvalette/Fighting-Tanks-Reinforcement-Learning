@@ -11,12 +11,12 @@ import matplotlib.pyplot as plt
 from tanks_paths import TANK_1_WEIGHTS, TANK_2_WEIGHTS, TANK_1_SAVE_WEIGHTS, TANK_2_SAVE_WEIGHTS, RENDERING
 
 # Hyperparameters
-EPISODES = 10_000
+EPISODES = 400
 GAMMA = 0.99
 ALPHA = 0.001
 GLOBAL_N = 11
 MAX_STEPS = 500 
-EPS_DECAY = 0.95
+EPS_DECAY = 0.98
 STATE_SIZE = 21
 
 def set_seed(seed=42):
@@ -65,9 +65,10 @@ def run_episode(agent_1, agent_2, epsilon, rendering, episode, render_every):
     return total_reward_1, total_reward_2, steps
 
 # Main Training Loop
-def main_training_loop(agent_1, agent_2, EPISODES, rendering, render_every = 10):
-    for episode in range(EPISODES):
+def main_training_loop(agent_1, agent_2, episodes, rendering, render_every = 10):
+    for episode in range(episodes):
         epsilon = np.clip(EPS_DECAY ** episode, 0.01, 0.75)
+        epsilon = 0.01
         
         total_reward_1, total_reward_2, steps = run_episode(agent_1, agent_2, epsilon, rendering, episode, render_every)
 
@@ -92,7 +93,7 @@ if __name__ == "__main__":
         action_sizes=[3, 3, 3, 2], # [move, rotate, strafe, fire]
         gamma = GAMMA,
         learning_rate = ALPHA,
-        load_model = False,
+        load_model = True,
     )
 
     agent_2 = TanksAgent(
@@ -100,7 +101,7 @@ if __name__ == "__main__":
         action_sizes=[3, 3, 3, 2], # [move, rotate, strafe, fire]
         gamma = GAMMA,
         learning_rate = ALPHA,
-        load_model = False,
+        load_model = True,
     )
 
     if agent_1.load_model:
@@ -111,4 +112,4 @@ if __name__ == "__main__":
         agent_2.model.load_state_dict(torch.load(TANK_2_WEIGHTS, weights_only=True))
 
     # Start the training loop
-    main_training_loop(agent_1, agent_2, EPISODES=100, rendering = RENDERING, render_every = 10)
+    main_training_loop(agent_1, agent_2, episodes = EPISODES, rendering = RENDERING, render_every = 1)

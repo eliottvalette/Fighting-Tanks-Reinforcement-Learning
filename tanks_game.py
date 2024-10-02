@@ -12,9 +12,9 @@ from tanks_paths import BACKGROUND, TANK_1_IMAGE, TANK_2_IMAGE, BULLET_IMAGE, CR
 SCREEN_WIDTH = 1000
 SCREEN_HEIGHT = 700
 TANK_1_SPEED = 5 # Tank 1 is faster
-TANK_2_SPEED = 3
+TANK_2_SPEED = 4
 ROTATION_ANGLE_1 = 1 # But rotates slower
-ROTATION_ANGLE_2 = 2
+ROTATION_ANGLE_2 = 1.5
 TANK_SIZE = 70
 BULLET_DAMAGE = 34
 BLOCK_SIZE = 100
@@ -31,10 +31,10 @@ class TanksGame:
         self.screen_dims = [SCREEN_WIDTH, SCREEN_HEIGHT]
         self.position_1 = [100, rd.randint(100, 600)]
         self.tank_1 = TankPlayer(image_file=TANK_1_IMAGE, location=self.position_1, width=TANK_SIZE, speed=TANK_1_SPEED, rendering=RENDERING)
-        self.tank_1.rotate(-30)
+        self.tank_1.rotate(0)
         self.position_2 = [SCREEN_WIDTH - 100, rd.randint(100, SCREEN_HEIGHT - 100)]
         self.tank_2 = TankPlayer(image_file=TANK_2_IMAGE, location=self.position_2, width=TANK_SIZE, speed=TANK_2_SPEED, rendering=RENDERING)
-        self.tank_2.rotate(150)
+        self.tank_2.rotate(180)
 
         self.last_laser_update = time.time()
         self.laser_update_interval = 0.1  # Adjust this interval based on your needs
@@ -49,12 +49,12 @@ class TanksGame:
     def reset(self):
         self.position_1 = [100, rd.randint(100, 600)]
         self.tank_1 = TankPlayer(image_file=TANK_1_IMAGE, location=self.position_1, width=TANK_SIZE, speed=TANK_1_SPEED, rendering=RENDERING)
-        self.tank_1.rotate(rd.randint(-30, 30))
+        self.tank_1.rotate(0)
         self.tank_1.cached_rad_angle = np.radians(self.tank_1.direction)
         
         self.position_2 = [SCREEN_WIDTH - 100, rd.randint(100, SCREEN_HEIGHT - 100)]
         self.tank_2 = TankPlayer(image_file=TANK_2_IMAGE, location=self.position_2, width=TANK_SIZE, speed=TANK_2_SPEED, rendering=RENDERING)
-        self.tank_2.rotate(rd.randint(150, 210))
+        self.tank_2.rotate(180)
         self.tank_2.cached_rad_angle = np.radians(self.tank_2.direction)
 
 
@@ -311,21 +311,21 @@ class TanksGame:
         means, stds, maxs = self.get_standardization_parameters()
 
         state = np.concatenate([
-            self.standardize(position, means["position"], stds["position"]),
-            [self.standardize(direction, means["direction"], stds["direction"])],
-            [self.normalize(health, maxs["health"])],
-            self.normalize(relative_position, maxs["relative_position"]),
-            [self.standardize(opponent_direction, means["opponent_direction"], stds["opponent_direction"])],
-            [self.normalize(opponent_health, maxs["opponent_health"])],
-            [self.normalize(relative_angle_toward_opponent, stds["relative_angle"])],
-            [self.normalize(distance_to_opponent, maxs["distance_to_opponent"])],
-            [self.normalize(distance_to_block, maxs["distance_to_block"])],
-            [self.normalize(ammo, maxs["ammo"])],
-            self.normalize(laser_distances, maxs["laser_distances"]),
-            [close_left],
-            [in_sight],
-            [close_right],
-            [is_reloaded],
+            self.standardize(position, means["position"], stds["position"]),          # (2) 
+            [self.standardize(direction, means["direction"], stds["direction"])],     # (1)
+            [self.normalize(health, maxs["health"])],                                 # (1)
+            self.normalize(relative_position, maxs["relative_position"]),             # (2)
+            [self.standardize(opponent_direction, means["opponent_direction"], stds["opponent_direction"])], # (1)
+            [self.normalize(opponent_health, maxs["opponent_health"])],               # (1)
+            [self.normalize(relative_angle_toward_opponent, stds["relative_angle"])], # (1)
+            [self.normalize(distance_to_opponent, maxs["distance_to_opponent"])],     # (1)
+            [self.normalize(distance_to_block, maxs["distance_to_block"])],           # (1)
+            [self.normalize(ammo, maxs["ammo"])],                                     # (1)
+            self.normalize(laser_distances, maxs["laser_distances"]),                 # (5)
+            [close_left],                                                             # (1)
+            [in_sight],                                                               # (1)
+            [close_right],                                                            # (1)
+            [is_reloaded],                                                            # (1)
         ])
         return state
 
@@ -347,7 +347,6 @@ class TanksGame:
         move_action, rotate_action, strafe_action, fire_action = actions
 
         previous_distance_between = np.linalg.norm(np.array(position) - np.array(opponent_position))
-        previous_relative_angle_toward_opponent = abs(self.get_angle_to_opponent(num_tank) / 180 - 1)
         
         if move_action == 0:
             self.move_forward(num_tank)
@@ -368,7 +367,6 @@ class TanksGame:
             self.fire_bullet(num_tank)
 
         new_distance_between = np.linalg.norm(np.array(position) - np.array(opponent_position))
-        new_relative_angle_toward_opponent = abs(self.get_angle_to_opponent(num_tank) / 180 - 1)
 
         self.update_bullets()           # Ensure bullets are updated every step
         self.check_bullet_collisions()  # Ensure collisions are checked every step
@@ -377,27 +375,16 @@ class TanksGame:
 
         # Reward for reducing the distance to the opponent while maintaining an optimal range
         optimal_distance = 200
-        if abs(new_distance_between - optimal_distance) < abs(previous_distance_between - optimal_distance):
+        if new_distance_between < previous_distance_between and new_distance_between > optimal_distance :
             tank.reward += 3
-        else:
+        elif new_distance_between > optimal_distance :
             tank.reward -= 2
-
-        # Reward for reducing the angle difference with the opponent
-        if new_relative_angle_toward_opponent < previous_relative_angle_toward_opponent:
-            tank.reward += 2
-        else:
-            tank.reward -= 2
-
-        # Penalty based on proximity to walls
-        distance_to_nearest_wall = min(position[0], SCREEN_WIDTH - position[0], position[1], SCREEN_HEIGHT - position[1])
-        wall_proximity_penalty = max(0, (100 - distance_to_nearest_wall) / 100)  # Penalty scales as the tank gets closer to the wall
-        tank.reward -= int(wall_proximity_penalty * 10)  # Tune the multiplier as needed
 
         if self.is_head_against_the_wall(laser_distances):
             tank.reward -= 5  # Penalty for bumping into the wall
 
         if opponent_tank.was_hit:
-            tank.reward += 50  # Large reward for hitting the opponent
+            tank.reward += 100  # Large reward for hitting the opponent
             opponent_tank.was_hit = False
 
         if tank.was_hit:
@@ -405,23 +392,12 @@ class TanksGame:
             tank.was_hit = False
 
         if tank.in_line_of_sight:
-            tank.reward += 5  # Reward for keeping the opponent in sight
-
-        if tank.on_close_right and rotate_action == 0:
-            tank.reward += 2  # Encourage rotating towards the opponent
-
-        if tank.on_close_left and rotate_action == 1:
-            tank.reward += 2  # Encourage rotating towards the opponent
-
-        if fire_action == 0 and tank.in_line_of_sight:
-            tank.reward += 25  # Reward for firing when the opponent is in sight
+            tank.reward += 0.2  # Reward for keeping the opponent in sight
 
         if tank.number_of_ammo == 0:
             tank.reward -= 60  # Penalty for running out of ammo
 
-        # Penalty for staying idle
-        if move_action == strafe_action == rotate_action == 2:
-            tank.reward -= 10
+        tank.reward -= 5 * abs(self.get_angle_to_opponent(num_tank = num_tank))
 
         if self.lost(tank):
             tank.reward -= 100  # Heavy penalty for losing
@@ -547,50 +523,85 @@ if __name__ == "__main__":
 
     # Main loop
     while run:
-        
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                run = False
 
         keys = pygame.key.get_pressed()  
 
-        # first Player
-        if keys[pygame.K_LEFT]:
-            game.strafe_left(num_tank = 1)
-        if keys[pygame.K_RIGHT]:
-            game.strafe_right(num_tank = 1)
-        if keys[pygame.K_UP]:
-            game.move_forward(num_tank = 1)
-        if keys[pygame.K_DOWN]:
-            game.move_backward(num_tank = 1)
-        if keys[pygame.K_l]:
-            game.rotate_tank(num_tank = 1, rotation_direction = 'left')
-        if keys[pygame.K_m]:
-            game.rotate_tank(num_tank = 1, rotation_direction = 'right')
-        if keys[pygame.K_k]:
-            game.fire_bullet(num_tank = 1)
-        
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT or keys[pygame.K_ESCAPE]:
+                run = False
 
-        # second one
+        # first Player
         if keys[pygame.K_q]:
-            game.strafe_left(num_tank = 2)
+            game.strafe_left(num_tank = 1)
         if keys[pygame.K_d]:
-            game.strafe_right(num_tank = 2)
+            game.strafe_right(num_tank = 1)
         if keys[pygame.K_z]:
-            game.move_forward(num_tank = 2)
+            game.move_forward(num_tank = 1)
         if keys[pygame.K_s]:
-            game.move_backward(num_tank = 2)
+            game.move_backward(num_tank = 1)
         if keys[pygame.K_a]:
-            game.rotate_tank(num_tank = 2, rotation_direction = 'left')
+            game.rotate_tank(num_tank = 1, rotation_direction = 'left')
         if keys[pygame.K_e]:
-            game.rotate_tank(num_tank = 2, rotation_direction = 'right')
+            game.rotate_tank(num_tank = 1, rotation_direction = 'right')
         if keys[pygame.K_f]:
+            game.fire_bullet(num_tank = 1)
+        # second one
+        if keys[pygame.K_LEFT]:
+            game.strafe_left(num_tank = 2)
+        if keys[pygame.K_RIGHT]:
+            game.strafe_right(num_tank = 2)
+        if keys[pygame.K_UP]:
+            game.move_forward(num_tank = 2)
+        if keys[pygame.K_DOWN]:
+            game.move_backward(num_tank = 2)
+        if keys[pygame.K_l]:
+            game.rotate_tank(num_tank = 2, rotation_direction = 'left')
+        if keys[pygame.K_m]:
+            game.rotate_tank(num_tank = 2, rotation_direction = 'right')
+        if keys[pygame.K_k]:
             game.fire_bullet(num_tank = 2)
         
+        if keys[pygame.K_r]:
+            game.reset()
+        
         if keys[pygame.K_g]:
-            print()
-            print('state 1 :, ', game.get_state(num_tank = 1))
-            print('state 2 :, ', game.get_state(num_tank = 2))
+            state_1 = game.get_state(num_tank=1)
+            state_2 = game.get_state(num_tank=2)
+
+            print("\n--- Tank 1 State ---")
+            print(f"Position: {state_1[:2]}")
+            print(f"Direction: {state_1[2]}")
+            print(f"Health: {state_1[3]}")
+            print(f"Relative Position to Opponent: {state_1[4:6]}")
+            print(f"Opponent Direction: {state_1[6]}")
+            print(f"Opponent Health: {state_1[7]}")
+            print(f"Relative Angle to Opponent: {state_1[8]}")
+            print(f"Distance to Opponent: {state_1[9]}")
+            print(f"Distance to Block: {state_1[10]}")
+            print(f"Ammo: {state_1[11]}")
+            print(f"Laser Distances: {state_1[12:17]}")
+            print(f"Close Left: {state_1[17]}")
+            print(f"In Line of Sight: {state_1[18]}")
+            print(f"Close Right: {state_1[19]}")
+            print(f"Is Reloaded: {state_1[20]}")
+
+            print("\n--- Tank 2 State ---")
+            print(f"Position: {state_2[:2]}")
+            print(f"Direction: {state_2[2]}")
+            print(f"Health: {state_2[3]}")
+            print(f"Relative Position to Opponent: {state_2[4:6]}")
+            print(f"Opponent Direction: {state_2[6]}")
+            print(f"Opponent Health: {state_2[7]}")
+            print(f"Relative Angle to Opponent: {state_2[8]}")
+            print(f"Distance to Opponent: {state_2[9]}")
+            print(f"Distance to Block: {state_2[10]}")
+            print(f"Ammo: {state_2[11]}")
+            print(f"Laser Distances: {state_2[12:17]}")
+            print(f"Close Left: {state_2[17]}")
+            print(f"In Line of Sight: {state_2[18]}")
+            print(f"Close Right: {state_2[19]}")
+            print(f"Is Reloaded: {state_2[20]}")
+
             time.sleep(0.1)
 
         # Check for bullet hits
@@ -600,3 +611,5 @@ if __name__ == "__main__":
         game.render(rendering=True, clock=300)
 
         pygame.display.flip()
+
+# TODO : ADD power-ups and heals
