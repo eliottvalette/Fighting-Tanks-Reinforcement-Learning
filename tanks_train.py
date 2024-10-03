@@ -13,9 +13,9 @@ from tanks_paths import TANK_1_WEIGHTS, TANK_2_WEIGHTS, TANK_1_SAVE_WEIGHTS, TAN
 # Hyperparameters
 EPISODES = 400
 GAMMA = 0.99
-ALPHA = 0.001
+ALPHA = 0.05
 GLOBAL_N = 11
-MAX_STEPS = 500 
+MAX_STEPS = 998 
 EPS_DECAY = 0.98
 STATE_SIZE = 21
 
@@ -33,7 +33,7 @@ def set_seed(seed=42):
 # Function to run a single episode
 def run_episode(agent_1, agent_2, epsilon, rendering, episode, render_every):
     # Create a new environment inside the process
-    env = TanksGame()
+    env = TanksGame(max_steps = MAX_STEPS)
     print(f'---Running episode {episode} ---')
     env.reset()
     done = False
@@ -41,7 +41,7 @@ def run_episode(agent_1, agent_2, epsilon, rendering, episode, render_every):
     total_reward_2 = 0
     steps = 0
 
-    while not done and steps < MAX_STEPS:
+    while not done :
         state_1 = env.get_state(num_tank=1)
         actions_1 = agent_1.get_actions(state_1, epsilon)
         next_state_1, reward_1, done, _ = env.step(actions_1, num_tank=1)
@@ -68,7 +68,6 @@ def run_episode(agent_1, agent_2, epsilon, rendering, episode, render_every):
 def main_training_loop(agent_1, agent_2, episodes, rendering, render_every = 10):
     for episode in range(episodes):
         epsilon = np.clip(EPS_DECAY ** episode, 0.01, 0.75)
-        epsilon = 0.01
         
         total_reward_1, total_reward_2, steps = run_episode(agent_1, agent_2, epsilon, rendering, episode, render_every)
 
@@ -93,7 +92,7 @@ if __name__ == "__main__":
         action_sizes=[3, 3, 3, 2], # [move, rotate, strafe, fire]
         gamma = GAMMA,
         learning_rate = ALPHA,
-        load_model = True,
+        load_model = False,
     )
 
     agent_2 = TanksAgent(
@@ -101,7 +100,7 @@ if __name__ == "__main__":
         action_sizes=[3, 3, 3, 2], # [move, rotate, strafe, fire]
         gamma = GAMMA,
         learning_rate = ALPHA,
-        load_model = True,
+        load_model = False,
     )
 
     if agent_1.load_model:

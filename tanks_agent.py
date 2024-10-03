@@ -8,7 +8,7 @@ import torch.optim as optim
 from tanks_model import TanksModel
 
 device = torch.device("mps") if torch.backends.mps.is_available() else torch.device("cpu")
-# device = 'cpu'
+device = 'cpu'
 
 class TanksAgent(nn.Module):
     def __init__(self, state_size, action_sizes, gamma, learning_rate, load_model = False):
