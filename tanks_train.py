@@ -45,13 +45,11 @@ def run_episode(agent_1, agent_2, epsilon, rendering, episode, render_every):
         state_1 = env.get_state(num_tank=1)
         actions_1 = agent_1.get_actions(state_1, epsilon)
         next_state_1, reward_1, done, _ = env.step(actions_1, num_tank=1)
-        agent_1.remember(state_1, actions_1, reward_1, next_state_1, done)
         agent_1.train_model(state_1, actions_1, reward_1, next_state_1, done)
 
         state_2 = env.get_state(num_tank=2)
         actions_2 = agent_2.get_actions(state_2, epsilon)
         next_state_2, reward_2, done, _ = env.step(actions_2, num_tank=2)
-        agent_2.remember(state_2, actions_2, reward_2, next_state_2, done)
         agent_2.train_model(state_2, actions_2, reward_2, next_state_2, done)
 
         total_reward_1 += reward_1
@@ -70,9 +68,6 @@ def main_training_loop(agent_1, agent_2, episodes, rendering, render_every = 10)
         epsilon = np.clip(EPS_DECAY ** episode, 0.01, 0.95)
         
         total_reward_1, total_reward_2, steps = run_episode(agent_1, agent_2, epsilon, rendering, episode, render_every)
-
-        # agent_1.replay()
-        # agent_2.replay()
 
         print(f'Episode: {episode + 1}, Total Reward Agent 1: {total_reward_1:.2f}, Total Reward Agent 2: {total_reward_2:.2f}, Steps: {steps}, Randomness: {epsilon:.2%}')
 

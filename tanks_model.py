@@ -7,37 +7,42 @@ class TanksModel(nn.Module):
     def __init__(self, state_size, action_sizes):
         super(TanksModel, self).__init__()
 
-        self.move_size = action_sizes[0]
-        self.rotate_size = action_sizes[1]
-        self.strafe_size = action_sizes[2]
-        self.fire_size = action_sizes[3]
-
         # Separate networks for each action
-        self.shared_net = nn.Sequential(
-            nn.Linear(state_size, 64),
-            nn.Linear(64, 128),
-            nn.LeakyReLU(),
-            nn.Linear(128, 256),
-            nn.LeakyReLU(),
-            nn.Linear(256, 128),
-            nn.LeakyReLU(),
-            nn.Linear(128, 64), 
-            nn.LeakyReLU(),
-            nn.Linear(64, 32),
-            nn.LeakyReLU(),
-            nn.Linear(32, action_sizes[0] + action_sizes[1] + action_sizes[2]+ action_sizes[3]),
-        )
-
-        self.softmax = nn.Softmax(dim=1)
+        self.fc1 = nn.Linear(state_size, 64)
+        self.fc2 = nn.Linear(64, 128)
+        self.fc3 = nn.Linear(128, 256)
+        self.fc4 = nn.Linear(256, 128)
+        self.fc5 = nn.Linear(128, 64)
+        self.fc6 = nn.Linear(64, 32)
+        self.fc7 = nn.Linear(32, sum(action_sizes))
+        self.leaky_relu = nn.LeakyReLU()
 
         self.i = 0
 
     def forward(self, state):
-        # Shared layer for all actions
-        shared_actions_list = self.shared_net(state)
-        movement_action = self.softmax(shared_actions_list[:, :self.move_size])
-        rotation_action = self.softmax(shared_actions_list[:, self.move_size : self.move_size + self.rotate_size])
-        strafe_action = self.softmax(shared_actions_list[:, self.move_size + self.rotate_size : self.move_size + self.rotate_size + self.strafe_size])
-        fire_action = self.softmax(shared_actions_list[:, self.move_size + self.rotate_size + self.strafe_size:])
         
-        return movement_action, rotation_action, strafe_action, fire_action
+        # Shared layer for all actions
+        x = self.fc1(state)
+        x = (x - x.mean()) / (x.std() + 1e-5)
+        x = self.fc2(x)
+        x = self.leaky_relu(x)
+        x = (x - x.mean()) / (x.std() + 1e-5)
+        x = self.fc3(x)
+        x = self.leaky_relu(x)
+        x = (x - x.mean()) / (x.std() + 1e-5)
+        x = self.fc4(x)
+        x = self.leaky_relu(x)
+        x = (x - x.mean()) / (x.std() + 1e-5)
+        x = self.fc5(x)
+        x = self.leaky_relu(x)
+        x = (x - x.mean()) / (x.std() + 1e-5)
+        x = self.fc6(x)
+        x = self.leaky_relu(x)
+        x = (x - x.mean()) / (x.std() + 1e-5)
+        shared_actions_list = self.fc7(x)
+
+        self.i += 1
+        if self.i % 50 == 49:
+            print('max and min ', shared_actions_list.max(), shared_actions_list.min())
+            
+        return shared_actions_list

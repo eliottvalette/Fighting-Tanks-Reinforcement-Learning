@@ -1,32 +1,31 @@
 # tanks_agent.py
 import numpy as np
 from collections import deque
-import random as rd
+import random
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from tanks_model import TanksModel
 
 device = torch.device("mps") if torch.backends.mps.is_available() else torch.device("cpu")
-device = 'cpu'
+# device = 'cpu'  # Uncomment this line if you want to force CPU
+
 print(f"Device: {device}")
 
-class TanksAgent(nn.Module):
-    def __init__(self, state_size, action_sizes, gamma, learning_rate, load_model = False):
-        super(TanksAgent, self).__init__()
+class TanksAgent:
+    def __init__(self, state_size, action_sizes, gamma, learning_rate, load_model=False):
         self.state_size = state_size
         self.action_sizes = action_sizes
         self.gamma = gamma
         self.learning_rate = learning_rate
 
-        self.memory = deque(maxlen=10_000)
-        self.batch_size = 256
-
         self.model = self.build_model().to(device)
-
         self.optimizer = optim.Adam(self.model.parameters(), lr=self.learning_rate)
         self.loss_fn = nn.MSELoss()
         self.load_model = load_model
+
+        if self.load_model:
+            self.load()
 
     def build_model(self):
         model = TanksModel(self.state_size, self.action_sizes)
@@ -37,113 +36,85 @@ class TanksAgent(nn.Module):
                 nn.init.zeros_(m.bias)
         return model
 
-    def forward(self, state):
-        return self.model(state)
+    def load(self):
+        # Implement model loading logic if necessary
+        pass
 
     def get_actions(self, state, epsilon):
-        if rd.random() <= epsilon:
-            actions = [rd.randint(0, action_size - 1) for action_size in self.action_sizes]
-            return actions  # Random actions for exploration
-
-        state = torch.FloatTensor(state).to(device).unsqueeze(0)  # Add batch dimension
-
-        with torch.no_grad():  # No gradient computation needed for action selection
-            q_values_movement, q_values_rotation, q_values_strafe, q_values_fire = self.forward(state)
-
-        q_values = [q_values_movement, q_values_rotation, q_values_strafe, q_values_fire]
+        """
+        Selects actions for each action dimension using epsilon-greedy policy.
+        """
+        state = torch.FloatTensor(state).unsqueeze(0).to(device)  # Shape: (1, state_size)
+        self.model.eval()
+        with torch.no_grad():
+            q_values = self.model(state)  # List of tensors
+        self.model.train()
 
         actions = []
-        for i in range(len(self.action_sizes)):
-            q_values_for_action = q_values[i]  # Remove batch dimension
-            best_action = torch.argmax(q_values_for_action).item()
-            actions.append(best_action)
+        q_values_grouped = torch.split(q_values, self.action_sizes, dim=1)
+        for q in q_values_grouped:
+            if random.random() < epsilon:
+                action = random.randint(0, len(q) - 1)
+            else:
+                action = torch.argmax(q, dim=1).item()
+            actions.append(action)
+        return actions # List of ints
 
-        return actions  # [int, int, int, int]
+    def train_model(self, state, actions, reward, next_state, done):
+        """
+        Trains the model using the Q-learning update rule.
+        """
+        # Convert state and next_state to tensors
+        state_tensor = torch.FloatTensor(state).unsqueeze(0).to(device)            # Shape: (1, state_size)
+        next_state_tensor = torch.FloatTensor(next_state).unsqueeze(0).to(device)  # Shape: (1, state_size)
+        actions_tensor = torch.LongTensor(actions).to(device)                      # List of ints
+        reward_tensor = torch.FloatTensor([reward]).to(device)                     # Shape: (1,)
+        done_tensor = torch.FloatTensor([done]).to(device)                         # Shape: (1,)
 
-    
-    def train_model(self, state, action, reward, next_state, done):
-        state = torch.FloatTensor(state).to(device)
-        next_state = torch.FloatTensor(next_state).to(device)
-        reward = torch.FloatTensor([reward]).to(device)
-        action = torch.LongTensor(action).to(device)
-        done = torch.FloatTensor([done]).to(device)
+        # Get current Q-values
+        q_values = self.model(state_tensor)  # Shape: (1, total_action_sizes)
+        q_values_grouped = torch.split(q_values, self.action_sizes, dim=1)  # Tuple of tensors
 
-        q_values = self.forward(state)
+        # Get next Q-values
+        with torch.no_grad():
+            q_next = self.model(next_state_tensor)
+            q_next_grouped = torch.split(q_next, self.action_sizes, dim=1)
 
-        with torch.no_grad(): 
-            next_q_values = self.forward(next_state)
+        # Initialize list for targets and predictions
+        targets = []
+        predictions = []
 
-        total_loss = 0
+        # Iterate over each action dimension
+        for idx, (q, q_nxt) in enumerate(zip(q_values_grouped, q_next_grouped)):
+            action = actions_tensor[idx]  # Action taken in this dimension
 
-        # Compute loss for each action dimension separately
-        for i in range(len(self.action_sizes)):
-            # Get current Q-value for the taken action
-            current_q_value = q_values[i][action[i]].unsqueeze(0)
+            # Predicted Q-value for the taken action
+            q_pred = q[0, action]
 
-            # Get max Q-value for next state
-            max_next_q_value = torch.max(next_q_values[i])
+            if done_tensor.item() == 1:
+                # If done, target is just the reward
+                target = reward_tensor
+            else:
+                # Target is reward + gamma * max Q(next_state, a')
+                target = reward_tensor + self.gamma * torch.max(q_nxt, dim=1)[0]
 
-            # Compute target Q-value
-            target_q_value = reward + (1 - done) * self.gamma * max_next_q_value
+            predictions.append(q_pred)
+            targets.append(target)
 
-            # Compute loss
-            loss = self.loss_fn(current_q_value, target_q_value)
-            total_loss += loss
+        # Stack predictions and targets
+        predictions = torch.stack(predictions)  # Shape: (num_action_dims,)
+        targets = torch.stack(targets).squeeze()  # Shape: (num_action_dims,)
+
+        # Compute loss
+        loss = self.loss_fn(predictions, targets)
 
         # Backpropagation
         self.optimizer.zero_grad()
-        total_loss.backward()
+        loss.backward()
 
-        # Apply gradient clipping
+        # Clip gradients
         torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
 
         self.optimizer.step()
-    
 
-    def remember(self, state, action, reward, next_state, done):
-        self.memory.append((state, action, reward, next_state, done))
-
-    def replay(self):
-        if len(self.memory) < self.batch_size:
-            return
-
-        # Sample a batch from memory
-        minibatch = rd.sample(self.memory, self.batch_size)
-
-        # Prepare batched data
-        states, actions, rewards, next_states, dones = zip(*minibatch)
-
-        # Convert to tensors and move to device
-        states = torch.FloatTensor(states).to(device)
-        actions = torch.LongTensor(actions).to(device)
-        rewards = torch.FloatTensor(rewards).to(device)
-        next_states = torch.FloatTensor(next_states).to(device)
-        dones = torch.FloatTensor(dones).to(device)
-
-        # Predict Q-values for current states and next states
-        q_values = self.forward(states)
-        with torch.no_grad():
-            next_q_values = self.forward(next_states)
-
-        total_loss = 0
-
-        # Compute loss for each action dimension separately
-        for i in range(len(self.action_sizes)):
-            # Current Q-values for the taken actions
-            current_q = q_values[i].gather(1, actions[:, i].unsqueeze(1)).squeeze(1)
-
-            # Max Q-values for the next states
-            max_next_q_value = torch.max(next_q_values[i], dim=1)[0]
-
-            # Compute target Q-values
-            target_q_value = rewards + (1 - dones) * self.gamma * max_next_q_value
-
-            # Compute loss
-            loss = self.loss_fn(current_q, target_q_value)
-            total_loss += loss
-
-        # Backpropagation
-        self.optimizer.zero_grad()
-        total_loss.backward()
-        self.optimizer.step()
 
