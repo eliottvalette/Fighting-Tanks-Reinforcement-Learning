@@ -65,7 +65,7 @@ def run_episode(agent_1, agent_2, epsilon, rendering, episode, render_every):
 # Main Training Loop
 def main_training_loop(agent_1, agent_2, episodes, rendering, render_every = 10):
     for episode in range(episodes):
-        epsilon = np.clip(EPS_DECAY ** episode, 0.01, 0.95)
+        epsilon = np.clip(0.5 * EPS_DECAY ** episode, 0.01, 0.5)
         
         total_reward_1, total_reward_2, steps = run_episode(agent_1, agent_2, epsilon, rendering, episode, render_every)
 
@@ -106,4 +106,4 @@ if __name__ == "__main__":
         agent_2.model.load_state_dict(torch.load(TANK_2_WEIGHTS, weights_only=True))
 
     # Start the training loop
-    main_training_loop(agent_1, agent_2, episodes = EPISODES, rendering = RENDERING, render_every = 10)
+    main_training_loop(agent_1, agent_2, episodes = EPISODES, rendering = RENDERING, render_every = 1)

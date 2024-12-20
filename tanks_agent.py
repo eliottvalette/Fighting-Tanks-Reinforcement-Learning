@@ -8,7 +8,7 @@ import torch.optim as optim
 from tanks_model import TanksModel
 
 device = torch.device("mps") if torch.backends.mps.is_available() else torch.device("cpu")
-# device = 'cpu'  # Uncomment this line if you want to force CPU
+device = 'cpu'  # Uncomment this line if you want to force CPU
 
 print(f"Device: {device}")
 
@@ -54,10 +54,11 @@ class TanksAgent:
         q_values_grouped = torch.split(q_values, self.action_sizes, dim=1)
         for q in q_values_grouped:
             if random.random() < epsilon:
-                action = random.randint(0, len(q) - 1)
+                action = random.randint(0, q.size(1) - 1)
             else:
                 action = torch.argmax(q, dim=1).item()
             actions.append(action)
+
         return actions # List of ints
 
     def train_model(self, state, actions, reward, next_state, done):

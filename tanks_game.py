@@ -16,7 +16,7 @@ TANK_2_SPEED = 5
 ROTATION_ANGLE_1 = 1 # But rotates slower
 ROTATION_ANGLE_2 = 1
 TANK_SIZE = 70
-BULLET_DAMAGE = 34
+BULLET_DAMAGE = 10
 BLOCK_SIZE = 100
 LASER_MAX_SIZE = int(np.sqrt(SCREEN_WIDTH ** 2 + SCREEN_HEIGHT ** 2))
 
@@ -348,7 +348,7 @@ class TanksGame:
         opponent_tank = getattr(self, f'tank_{3 - num_tank}')
         opponent_position = getattr(self, f'position_{3 - num_tank}')
 
-        tank.reward = -0.2
+        tank.reward = -0.5
 
         move_action, rotate_action, strafe_action, fire_action = actions
 
@@ -385,33 +385,31 @@ class TanksGame:
         optimal_distance_max = 500
         optimal_distance_min = 300
 
-        if (new_distance_between < optimal_distance_max) and (new_distance_between > optimal_distance_min) :
-            tank.reward += 2
-        elif new_distance_between > optimal_distance_max and new_distance_between < previous_distance_between :
+        if new_distance_between > optimal_distance_max and new_distance_between < previous_distance_between :
             tank.reward += 1
         elif new_distance_between < optimal_distance_min and new_distance_between > previous_distance_between :
             tank.reward += 1
         else :
-            tank.reward -= 3
+            tank.reward -= 0.5
 
         if new_angle_to_opponent <= previous_angle_to_opponent :
-            tank.reward += 2
+            tank.reward += 1
         elif new_angle_to_opponent > 0.1:
-            tank.reward -= 1
+            tank.reward -= 0.5
 
         if self.is_head_against_the_wall(laser_distances):
-            tank.reward -= 1  # Penalty for bumping into the wall
+            tank.reward -= 5  # Penalty for bumping into the wall
 
         if opponent_tank.was_hit:
-            tank.reward += 200  # Large reward for hitting the opponent
+            tank.reward += 300  # Large reward for hitting the opponent
             opponent_tank.was_hit = False
 
         if tank.was_hit:
-            tank.reward -= 30  # Penalty for getting hit
+            tank.reward -= 50  # Penalty for getting hit
             tank.was_hit = False
 
         if tank.in_line_of_sight:
-            tank.reward += 2  # Reward for keeping the opponent in sight
+            tank.reward += 5  # Reward for keeping the opponent in sight
 
         if tank.number_of_ammo == 0:
             tank.reward -= 60  # Penalty for running out of ammo
@@ -422,7 +420,11 @@ class TanksGame:
         elif self.lost(opponent_tank):
             tank.reward += 2_000  # Large reward for winning
             done = True
-        elif self.current_step > self.max_steps:
+        elif self.current_step > self.max_steps and tank.health > opponent_tank.health:
+            tank.reward += 100
+            done = True
+        elif self.current_step > self.max_steps and tank.health < opponent_tank.health:
+            tank.reward -= 100
             done = True
         else:
             done = False

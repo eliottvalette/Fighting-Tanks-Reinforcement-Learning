@@ -42,7 +42,5 @@ class TanksModel(nn.Module):
         shared_actions_list = self.fc7(x)
 
         self.i += 1
-        if self.i % 50 == 49:
-            print('max and min ', shared_actions_list.max(), shared_actions_list.min())
             
         return shared_actions_list
