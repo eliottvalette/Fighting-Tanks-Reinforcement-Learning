@@ -12,12 +12,12 @@ from tanks_paths import BACKGROUND, TANK_1_IMAGE, TANK_2_IMAGE, BULLET_IMAGE, CR
 SCREEN_WIDTH = 1000
 SCREEN_HEIGHT = 700
 TANK_1_SPEED = 5 # Tank 1 is faster
-TANK_2_SPEED = 0
+TANK_2_SPEED = 5
 ROTATION_ANGLE_1 = 1 # But rotates slower
-ROTATION_ANGLE_2 = 0
+ROTATION_ANGLE_2 = 1
 TANK_SIZE = 70
 BULLET_DAMAGE = 34
-BLOCK_SIZE = 1
+BLOCK_SIZE = 100
 LASER_MAX_SIZE = int(np.sqrt(SCREEN_WIDTH ** 2 + SCREEN_HEIGHT ** 2))
 
 background = Background(image_file = BACKGROUND, location = [0,0], width = SCREEN_WIDTH, height = SCREEN_HEIGHT, rendering = RENDERING)
@@ -34,7 +34,7 @@ class TanksGame:
         self.tank_1.rotate(0)
         self.position_2 = [SCREEN_WIDTH - 100, rd.randint(100, SCREEN_HEIGHT - 100)]
         self.tank_2 = TankPlayer(image_file=TANK_2_IMAGE, location=self.position_2, width=TANK_SIZE, speed=TANK_2_SPEED, rendering=RENDERING)
-        self.tank_2.rotate(0)
+        self.tank_2.rotate(180)
 
         self.last_laser_update = time.time()
         self.laser_update_interval = 0.1  # Adjust this interval based on your needs
@@ -58,7 +58,7 @@ class TanksGame:
         
         self.position_2 = [SCREEN_WIDTH - 100, rd.randint(100, SCREEN_HEIGHT - 100)]
         self.tank_2 = TankPlayer(image_file=TANK_2_IMAGE, location=self.position_2, width=TANK_SIZE, speed=TANK_2_SPEED, rendering=RENDERING)
-        self.tank_2.rotate(0)
+        self.tank_2.rotate(180)
         self.tank_2.cached_rad_angle = np.radians(self.tank_2.direction)
 
         self.current_step = 0
@@ -348,7 +348,7 @@ class TanksGame:
         opponent_tank = getattr(self, f'tank_{3 - num_tank}')
         opponent_position = getattr(self, f'position_{3 - num_tank}')
 
-        tank.reward=0
+        tank.reward = -0.2
 
         move_action, rotate_action, strafe_action, fire_action = actions
 
@@ -382,25 +382,28 @@ class TanksGame:
         laser_distances = np.array(self.get_all_laser_distances(LASER_MAX_SIZE)[num_tank - 1])/LASER_MAX_SIZE
 
         # Reward for reducing the distance to the opponent while maintaining an optimal range
-        optimal_distance = 400
+        optimal_distance_max = 500
+        optimal_distance_min = 300
 
-        if new_distance_between < previous_distance_between and new_distance_between > optimal_distance :
+        if (new_distance_between < optimal_distance_max) and (new_distance_between > optimal_distance_min) :
             tank.reward += 2
-        elif new_distance_between > optimal_distance :
-            tank.reward -= 1
+        elif new_distance_between > optimal_distance_max and new_distance_between < previous_distance_between :
+            tank.reward += 1
+        elif new_distance_between < optimal_distance_min and new_distance_between > previous_distance_between :
+            tank.reward += 1
+        else :
+            tank.reward -= 3
 
         if new_angle_to_opponent <= previous_angle_to_opponent :
             tank.reward += 2
         elif new_angle_to_opponent > 0.1:
             tank.reward -= 1
 
-        tank.reward -= 5 * new_angle_to_opponent
-
         if self.is_head_against_the_wall(laser_distances):
-            tank.reward -= 5  # Penalty for bumping into the wall
+            tank.reward -= 1  # Penalty for bumping into the wall
 
         if opponent_tank.was_hit:
-            tank.reward += 100  # Large reward for hitting the opponent
+            tank.reward += 200  # Large reward for hitting the opponent
             opponent_tank.was_hit = False
 
         if tank.was_hit:
@@ -408,7 +411,7 @@ class TanksGame:
             tank.was_hit = False
 
         if tank.in_line_of_sight:
-            tank.reward += 0.2  # Reward for keeping the opponent in sight
+            tank.reward += 2  # Reward for keeping the opponent in sight
 
         if tank.number_of_ammo == 0:
             tank.reward -= 60  # Penalty for running out of ammo
@@ -420,7 +423,6 @@ class TanksGame:
             tank.reward += 2_000  # Large reward for winning
             done = True
         elif self.current_step > self.max_steps:
-            tank.reward -= 1_000  # Heavy penalty for running out of time
             done = True
         else:
             done = False

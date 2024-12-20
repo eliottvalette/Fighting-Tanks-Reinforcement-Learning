@@ -12,10 +12,10 @@ from tanks_paths import TANK_1_WEIGHTS, TANK_2_WEIGHTS, TANK_1_SAVE_WEIGHTS, TAN
 
 # Hyperparameters
 EPISODES = 400
-GAMMA = 0.99
+GAMMA = 0.9985
 ALPHA = 0.05
 GLOBAL_N = 11
-MAX_STEPS = 998 
+MAX_STEPS = 1_998 
 EPS_DECAY = 0.98
 STATE_SIZE = 21
 
@@ -67,7 +67,7 @@ def run_episode(agent_1, agent_2, epsilon, rendering, episode, render_every):
 # Main Training Loop
 def main_training_loop(agent_1, agent_2, episodes, rendering, render_every = 10):
     for episode in range(episodes):
-        epsilon = np.clip(EPS_DECAY ** episode, 0.01, 0.75)
+        epsilon = np.clip(EPS_DECAY ** episode, 0.01, 0.95)
         
         total_reward_1, total_reward_2, steps = run_episode(agent_1, agent_2, epsilon, rendering, episode, render_every)
 
@@ -111,4 +111,4 @@ if __name__ == "__main__":
         agent_2.model.load_state_dict(torch.load(TANK_2_WEIGHTS, weights_only=True))
 
     # Start the training loop
-    main_training_loop(agent_1, agent_2, episodes = EPISODES, rendering = RENDERING, render_every = 1)
+    main_training_loop(agent_1, agent_2, episodes = EPISODES, rendering = RENDERING, render_every = 10)
