@@ -29,12 +29,12 @@ class TanksGame:
             self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
             self.clock = pygame.time.Clock()
         self.screen_dims = [SCREEN_WIDTH, SCREEN_HEIGHT]
-        self.position_1 = [100, rd.randint(100, 600)]
+        self.position_1 = [rd.randint(100, SCREEN_WIDTH - 100), rd.randint(100, SCREEN_HEIGHT - 100)]
         self.tank_1 = TankPlayer(image_file=TANK_1_IMAGE, location=self.position_1, width=TANK_SIZE, speed=TANK_1_SPEED, rendering=RENDERING)
-        self.tank_1.rotate(0)
-        self.position_2 = [SCREEN_WIDTH - 100, rd.randint(100, SCREEN_HEIGHT - 100)]
+        self.tank_1.rotate(rd.randint(0, 360))
+        self.position_2 = [rd.randint(100, SCREEN_WIDTH - 100), rd.randint(100, SCREEN_HEIGHT - 100)]
         self.tank_2 = TankPlayer(image_file=TANK_2_IMAGE, location=self.position_2, width=TANK_SIZE, speed=TANK_2_SPEED, rendering=RENDERING)
-        self.tank_2.rotate(180)
+        self.tank_2.rotate(rd.randint(0, 360))
 
         self.last_laser_update = time.time()
         self.laser_update_interval = 0.1  # Adjust this interval based on your needs
@@ -51,14 +51,14 @@ class TanksGame:
 
 
     def reset(self):
-        self.position_1 = [100, rd.randint(100, 600)]
+        self.position_1 = [rd.randint(100, SCREEN_WIDTH - 100), rd.randint(100, SCREEN_HEIGHT - 100)]
         self.tank_1 = TankPlayer(image_file=TANK_1_IMAGE, location=self.position_1, width=TANK_SIZE, speed=TANK_1_SPEED, rendering=RENDERING)
-        self.tank_1.rotate(0)
+        self.tank_2.rotate(rd.randint(0, 360))
         self.tank_1.cached_rad_angle = np.radians(self.tank_1.direction)
         
-        self.position_2 = [SCREEN_WIDTH - 100, rd.randint(100, SCREEN_HEIGHT - 100)]
+        self.position_2 = [rd.randint(100, SCREEN_WIDTH - 100), rd.randint(100, SCREEN_HEIGHT - 100)]
         self.tank_2 = TankPlayer(image_file=TANK_2_IMAGE, location=self.position_2, width=TANK_SIZE, speed=TANK_2_SPEED, rendering=RENDERING)
-        self.tank_2.rotate(180)
+        self.tank_2.rotate(rd.randint(0, 360))
         self.tank_2.cached_rad_angle = np.radians(self.tank_2.direction)
 
         self.current_step = 0
