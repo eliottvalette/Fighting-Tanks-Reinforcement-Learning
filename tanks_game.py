@@ -12,11 +12,11 @@ from tanks_paths import BACKGROUND, TANK_1_IMAGE, TANK_2_IMAGE, BULLET_IMAGE, CR
 SCREEN_WIDTH = 1000
 SCREEN_HEIGHT = 700
 TANK_1_SPEED = 5 # Tank 1 is faster
-TANK_2_SPEED = 5
+TANK_2_SPEED = 3
 ROTATION_ANGLE_1 = 1 # But rotates slower
-ROTATION_ANGLE_2 = 1
+ROTATION_ANGLE_2 = 2
 TANK_SIZE = 70
-BULLET_DAMAGE = 10
+BULLET_DAMAGE = 100
 BLOCK_SIZE = 100
 LASER_MAX_SIZE = int(np.sqrt(SCREEN_WIDTH ** 2 + SCREEN_HEIGHT ** 2))
 
@@ -29,10 +29,10 @@ class TanksGame:
             self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
             self.clock = pygame.time.Clock()
         self.screen_dims = [SCREEN_WIDTH, SCREEN_HEIGHT]
-        self.position_1 = [rd.randint(100, SCREEN_WIDTH - 100), rd.randint(100, SCREEN_HEIGHT - 100)]
+        self.position_1 = [100, rd.randint(100, SCREEN_HEIGHT - 100)]
         self.tank_1 = TankPlayer(image_file=TANK_1_IMAGE, location=self.position_1, width=TANK_SIZE, speed=TANK_1_SPEED, rendering=RENDERING)
         self.tank_1.rotate(rd.randint(0, 360))
-        self.position_2 = [rd.randint(100, SCREEN_WIDTH - 100), rd.randint(100, SCREEN_HEIGHT - 100)]
+        self.position_2 = [SCREEN_WIDTH - 100, rd.randint(100, SCREEN_HEIGHT - 100)]
         self.tank_2 = TankPlayer(image_file=TANK_2_IMAGE, location=self.position_2, width=TANK_SIZE, speed=TANK_2_SPEED, rendering=RENDERING)
         self.tank_2.rotate(rd.randint(0, 360))
 
@@ -51,12 +51,12 @@ class TanksGame:
 
 
     def reset(self):
-        self.position_1 = [rd.randint(100, SCREEN_WIDTH - 100), rd.randint(100, SCREEN_HEIGHT - 100)]
+        self.position_1 = [100, rd.randint(100, SCREEN_HEIGHT - 100)]
         self.tank_1 = TankPlayer(image_file=TANK_1_IMAGE, location=self.position_1, width=TANK_SIZE, speed=TANK_1_SPEED, rendering=RENDERING)
         self.tank_2.rotate(rd.randint(0, 360))
         self.tank_1.cached_rad_angle = np.radians(self.tank_1.direction)
         
-        self.position_2 = [rd.randint(100, SCREEN_WIDTH - 100), rd.randint(100, SCREEN_HEIGHT - 100)]
+        self.position_2 = [SCREEN_WIDTH - 100, rd.randint(100, SCREEN_HEIGHT - 100)]
         self.tank_2 = TankPlayer(image_file=TANK_2_IMAGE, location=self.position_2, width=TANK_SIZE, speed=TANK_2_SPEED, rendering=RENDERING)
         self.tank_2.rotate(rd.randint(0, 360))
         self.tank_2.cached_rad_angle = np.radians(self.tank_2.direction)
@@ -191,20 +191,27 @@ class TanksGame:
             ray_x = x + distance * math.cos(angle_rad)
             ray_y = y + distance * math.sin(angle_rad)
 
-            # Check if ray hits border or middle block
-            if not (0 <= ray_x < SCREEN_WIDTH and 0 <= ray_y < SCREEN_HEIGHT):
-                return distance
-            if self.middle_block.rect.collidepoint(ray_x, ray_y):
-                return distance
-
             # Update tank's laser detection status
             compensated_laser_direction = (direction + tank.direction) % 360
+
             if compensated_laser_direction == 0:
                 tank.in_line_of_sight = False
+                tank.looking_block = False
             elif compensated_laser_direction == 20:
                 tank.on_close_right = False
             elif compensated_laser_direction == 340:
                 tank.on_close_left = False
+
+            # Check if ray hits border or middle block
+            if not (0 <= ray_x < SCREEN_WIDTH and 0 <= ray_y < SCREEN_HEIGHT):
+                return distance
+
+
+
+            if self.middle_block.rect.collidepoint(ray_x, ray_y):
+                if compensated_laser_direction == 0:
+                    tank.looking_block = True
+                return distance
 
             if opponent_tank.rect.collidepoint(ray_x, ray_y):
                 if compensated_laser_direction == 0:
@@ -302,6 +309,7 @@ class TanksGame:
         relative_angle_toward_opponent = self.get_angle_to_opponent(num_tank)
         ammo, in_sight = tank.number_of_ammo, tank.in_line_of_sight
         close_right, close_left, is_reloaded = tank.on_close_right, tank.on_close_left, tank.check_cooldown(time.time())
+        looking_block = tank.looking_block
 
         distance_to_opponent = np.sqrt((opponent_position[0] - position[0])**2 + (opponent_position[1] - position[1])**2)
         block_center = self.middle_block.rect.center
@@ -313,6 +321,7 @@ class TanksGame:
         relative_position = np.dot(rotation_matrix, relative_position)
 
         laser_distances = np.array(self.get_all_laser_distances(LASER_MAX_SIZE)[num_tank - 1])
+        head_on_wall = self.is_head_against_the_wall(laser_distances)
 
         means, stds, maxs = self.get_standardization_parameters()
 
@@ -332,14 +341,16 @@ class TanksGame:
             [in_sight],                                                               # (1)
             [close_right],                                                            # (1)
             [is_reloaded],                                                            # (1)
+            [head_on_wall],                                                           # (1)
+            [looking_block],
         ])
         return state
 
 
     def is_head_against_the_wall(self, laser_distances):
-        right = laser_distances[0] < 0.075
-        middle = laser_distances[1] < 0.06
-        left = laser_distances[-1] < 0.075
+        right = laser_distances[0] < 90
+        middle = laser_distances[1] < 90
+        left = laser_distances[-1] < 90
         return right and middle and left
     
     def step(self, actions, num_tank):
@@ -379,7 +390,7 @@ class TanksGame:
         self.update_bullets()           # Ensure bullets are updated every step
         self.check_bullet_collisions()  # Ensure collisions are checked every step
 
-        laser_distances = np.array(self.get_all_laser_distances(LASER_MAX_SIZE)[num_tank - 1])/LASER_MAX_SIZE
+        laser_distances = np.array(self.get_all_laser_distances(LASER_MAX_SIZE)[num_tank - 1])
 
         # Reward for reducing the distance to the opponent while maintaining an optimal range
         optimal_distance_max = 500
@@ -399,6 +410,8 @@ class TanksGame:
 
         if self.is_head_against_the_wall(laser_distances):
             tank.reward -= 5  # Penalty for bumping into the wall
+        if tank.looking_block:
+            tank.reward -= 1
 
         if opponent_tank.was_hit:
             tank.reward += 300  # Large reward for hitting the opponent
@@ -418,13 +431,10 @@ class TanksGame:
             tank.reward -= 1_000  # Heavy penalty for losing
             done = True
         elif self.lost(opponent_tank):
-            tank.reward += 2_000  # Large reward for winning
+            tank.reward += 1_500  # Large reward for winning
             done = True
-        elif self.current_step > self.max_steps and tank.health > opponent_tank.health:
-            tank.reward += 100
-            done = True
-        elif self.current_step > self.max_steps and tank.health < opponent_tank.health:
-            tank.reward -= 100
+        elif self.current_step > self.max_steps:
+            tank.reward -= 500
             done = True
         else:
             done = False
@@ -539,7 +549,7 @@ if __name__ == "__main__":
     pygame.init()
 
     # Create the game environment
-    game = TanksGame()
+    game = TanksGame(max_steps= 3000)
 
     run = True
 
@@ -606,6 +616,9 @@ if __name__ == "__main__":
             print(f"In Line of Sight: {state_1[18]}")
             print(f"Close Right: {state_1[19]}")
             print(f"Is Reloaded: {state_1[20]}")
+            print(f"Head on Wall: {state_1[21]}")
+            print(f"Looking Block: {state_1[22]}")
+
 
             print("\n--- Tank 2 State ---")
             print(f"Position: {state_2[:2]}")
@@ -623,6 +636,8 @@ if __name__ == "__main__":
             print(f"In Line of Sight: {state_2[18]}")
             print(f"Close Right: {state_2[19]}")
             print(f"Is Reloaded: {state_2[20]}")
+            print(f"Head on Wall: {state_2[21]}")
+            print(f"Looking Block: {state_2[22]}")
 
             time.sleep(0.1)
 

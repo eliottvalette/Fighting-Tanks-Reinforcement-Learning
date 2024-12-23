@@ -13,11 +13,11 @@ from tanks_paths import TANK_1_WEIGHTS, TANK_2_WEIGHTS, TANK_1_SAVE_WEIGHTS, TAN
 # Hyperparameters
 EPISODES = 400
 GAMMA = 0.9985
-ALPHA = 0.05
+ALPHA = 0.001
 GLOBAL_N = 11
 MAX_STEPS = 1_998 
 EPS_DECAY = 0.98
-STATE_SIZE = 21
+STATE_SIZE = 23
 
 def set_seed(seed=42):
     rd.seed(seed)

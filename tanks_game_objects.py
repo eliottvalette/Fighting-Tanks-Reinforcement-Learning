@@ -44,6 +44,7 @@ class TankPlayer:
         self.in_line_of_sight = False
         self.on_close_right = False
         self.on_close_left = False
+        self.looking_block = False
         self.health = TANK_HEALTH
         self.number_of_ammo = TANK_AMMO
         self.reward = 0
