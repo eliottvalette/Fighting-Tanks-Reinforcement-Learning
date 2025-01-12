@@ -3,44 +3,52 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-class TanksModel(nn.Module):
+class ActorCriticModel(nn.Module):
     def __init__(self, state_size, action_sizes):
-        super(TanksModel, self).__init__()
+        super(ActorCriticModel, self).__init__()
 
-        # Separate networks for each action
-        self.fc1 = nn.Linear(state_size, 64)
-        self.fc2 = nn.Linear(64, 128)
-        self.fc3 = nn.Linear(128, 256)
-        self.fc4 = nn.Linear(256, 128)
-        self.fc5 = nn.Linear(128, 64)
-        self.fc6 = nn.Linear(64, 32)
-        self.fc7 = nn.Linear(32, sum(action_sizes))
-        self.leaky_relu = nn.LeakyReLU()
+        self.shared_layers = nn.Sequential(
+            nn.Linear(state_size, 256),
+            nn.LayerNorm(256),
+            nn.ReLU(),
+            nn.Linear(256, 256),
+            nn.LayerNorm(256),
+            nn.ReLU(),
+        )
 
-        self.i = 0
+        # Separate streams for actor and critic
+        self.actor_layers = nn.Sequential(
+            nn.Linear(256, 128),
+            nn.ReLU(),
+            nn.Linear(128, sum(action_sizes)),
+        )
+
+        self.critic_layers = nn.Sequential(
+            nn.Linear(256, 128),
+            nn.ReLU(),
+            nn.Linear(128, 1),
+        )
+
+        # Action sizes to split the actor output
+        self.action_sizes = action_sizes
+
+        # Initialize weights
+        self.apply(self._init_weights)
+
+    def _init_weights(self, module):
+        if isinstance(module, nn.Linear):
+            nn.init.orthogonal_(module.weight, gain=nn.init.calculate_gain('relu'))
+            nn.init.zeros_(module.bias)
 
     def forward(self, state):
-        
-        # Shared layer for all actions
-        x = self.fc1(state)
-        x = (x - x.mean()) / (x.std() + 1e-5)
-        x = self.fc2(x)
-        x = self.leaky_relu(x)
-        x = (x - x.mean()) / (x.std() + 1e-5)
-        x = self.fc3(x)
-        x = self.leaky_relu(x)
-        x = (x - x.mean()) / (x.std() + 1e-5)
-        x = self.fc4(x)
-        x = self.leaky_relu(x)
-        x = (x - x.mean()) / (x.std() + 1e-5)
-        x = self.fc5(x)
-        x = self.leaky_relu(x)
-        x = (x - x.mean()) / (x.std() + 1e-5)
-        x = self.fc6(x)
-        x = self.leaky_relu(x)
-        x = (x - x.mean()) / (x.std() + 1e-5)
-        shared_actions_list = self.fc7(x)
+        shared_features = self.shared_layers(state)
 
-        self.i += 1
-            
-        return shared_actions_list
+        # Actor: Predict action probabilities for all actions
+        action_logits = self.actor_layers(shared_features)
+        action_logits_grouped = torch.split(action_logits, self.action_sizes, dim=1)
+        action_probs_grouped = [F.softmax(logits, dim=1) for logits in action_logits_grouped]
+
+        # Critic: Predict state value
+        state_value = self.critic_layers(shared_features).squeeze(-1)
+
+        return action_probs_grouped, state_value

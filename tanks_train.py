@@ -31,36 +31,35 @@ def set_seed(seed=42):
     torch.backends.cudnn.benchmark = False
 
 # Function to run a single episode
+# tanks_train.py
 def run_episode(agent_1, agent_2, epsilon, rendering, episode, render_every):
-    # Create a new environment inside the process
-    env = TanksGame(max_steps = MAX_STEPS)
-    print(f'---Running episode {episode} ---')
+    env = TanksGame(max_steps=MAX_STEPS)
     env.reset()
     done = False
-    total_reward_1 = 0
-    total_reward_2 = 0
-    steps = 0
+    total_reward_1, total_reward_2 = 0, 0
 
-    while not done :
+    while not done:
+        # Agent 1
         state_1 = env.get_state(num_tank=1)
-        actions_1 = agent_1.get_actions(state_1, epsilon)
+        actions_1 = agent_1.act(state_1)
         next_state_1, reward_1, done, _ = env.step(actions_1, num_tank=1)
-        agent_1.train_model(state_1, actions_1, reward_1, next_state_1, done)
+        agent_1.remember(state_1, actions_1, reward_1, next_state_1, done)
 
+        # Agent 2
         state_2 = env.get_state(num_tank=2)
-        actions_2 = agent_2.get_actions(state_2, epsilon)
+        actions_2 = agent_2.act(state_2)
         next_state_2, reward_2, done, _ = env.step(actions_2, num_tank=2)
-        agent_2.train_model(state_2, actions_2, reward_2, next_state_2, done)
+        agent_2.remember(state_2, actions_2, reward_2, next_state_2, done)
 
         total_reward_1 += reward_1
         total_reward_2 += reward_2
 
-        rendering = episode % render_every == 0
-        env.render(rendering=rendering, clock=100, epsilon=epsilon)
+        env.render(rendering=(episode % render_every == 0), clock = 2000)
 
-        steps += 1
+    agent_1.train_model()
+    agent_2.train_model()
 
-    return total_reward_1, total_reward_2, steps
+    return total_reward_1, total_reward_2, env.current_step  # Fix attribute name
 
 # Main Training Loop
 def main_training_loop(agent_1, agent_2, episodes, rendering, render_every = 10):

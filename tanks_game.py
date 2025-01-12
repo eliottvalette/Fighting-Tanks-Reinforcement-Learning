@@ -11,12 +11,12 @@ from tanks_paths import BACKGROUND, TANK_1_IMAGE, TANK_2_IMAGE, BULLET_IMAGE, CR
 
 SCREEN_WIDTH = 1000
 SCREEN_HEIGHT = 700
-TANK_1_SPEED = 5 # Tank 1 is faster
+TANK_1_SPEED = 3
 TANK_2_SPEED = 3
-ROTATION_ANGLE_1 = 1 # But rotates slower
-ROTATION_ANGLE_2 = 2
+ROTATION_ANGLE_1 = 0.6
+ROTATION_ANGLE_2 = 0.6
 TANK_SIZE = 70
-BULLET_DAMAGE = 100
+BULLET_DAMAGE = 34
 BLOCK_SIZE = 100
 LASER_MAX_SIZE = int(np.sqrt(SCREEN_WIDTH ** 2 + SCREEN_HEIGHT ** 2))
 
@@ -31,10 +31,11 @@ class TanksGame:
         self.screen_dims = [SCREEN_WIDTH, SCREEN_HEIGHT]
         self.position_1 = [100, rd.randint(100, SCREEN_HEIGHT - 100)]
         self.tank_1 = TankPlayer(image_file=TANK_1_IMAGE, location=self.position_1, width=TANK_SIZE, speed=TANK_1_SPEED, rendering=RENDERING)
-        self.tank_1.rotate(rd.randint(0, 360))
+        self.tank_1.rotate(90)
         self.position_2 = [SCREEN_WIDTH - 100, rd.randint(100, SCREEN_HEIGHT - 100)]
         self.tank_2 = TankPlayer(image_file=TANK_2_IMAGE, location=self.position_2, width=TANK_SIZE, speed=TANK_2_SPEED, rendering=RENDERING)
-        self.tank_2.rotate(rd.randint(0, 360))
+        self.tank_2.rotate(-180)
+        self.tank_1.number_of_ammo = 0
 
         self.last_laser_update = time.time()
         self.laser_update_interval = 0.1  # Adjust this interval based on your needs
@@ -53,12 +54,12 @@ class TanksGame:
     def reset(self):
         self.position_1 = [100, rd.randint(100, SCREEN_HEIGHT - 100)]
         self.tank_1 = TankPlayer(image_file=TANK_1_IMAGE, location=self.position_1, width=TANK_SIZE, speed=TANK_1_SPEED, rendering=RENDERING)
-        self.tank_2.rotate(rd.randint(0, 360))
+        self.tank_2.rotate(90)
         self.tank_1.cached_rad_angle = np.radians(self.tank_1.direction)
         
         self.position_2 = [SCREEN_WIDTH - 100, rd.randint(100, SCREEN_HEIGHT - 100)]
         self.tank_2 = TankPlayer(image_file=TANK_2_IMAGE, location=self.position_2, width=TANK_SIZE, speed=TANK_2_SPEED, rendering=RENDERING)
-        self.tank_2.rotate(rd.randint(0, 360))
+        self.tank_2.rotate(-180)
         self.tank_2.cached_rad_angle = np.radians(self.tank_2.direction)
 
         self.current_step = 0
@@ -359,22 +360,23 @@ class TanksGame:
         opponent_tank = getattr(self, f'tank_{3 - num_tank}')
         opponent_position = getattr(self, f'position_{3 - num_tank}')
 
-        tank.reward = -0.5
+        tank.reward = -0.5  # Base penalty for each step to encourage efficient behavior
 
         move_action, rotate_action, strafe_action, fire_action = actions
 
         previous_distance_between = np.linalg.norm(np.array(position) - np.array(opponent_position))
-        previous_angle_to_opponent = abs(self.get_angle_to_opponent(num_tank = num_tank))
+        previous_angle_to_opponent = abs(self.get_angle_to_opponent(num_tank=num_tank))
         
+        # Execute actions
         if move_action == 0:
             self.move_forward(num_tank)
         elif move_action == 1:
             self.move_backward(num_tank)
         
         if rotate_action == 0:
-            self.rotate_tank(num_tank, rotation_direction= 'right')
+            self.rotate_tank(num_tank, rotation_direction='right')
         elif rotate_action == 1:
-            self.rotate_tank(num_tank, rotation_direction= 'left')
+            self.rotate_tank(num_tank, rotation_direction='left')
         
         if strafe_action == 0:
             self.strafe_left(num_tank)
@@ -385,56 +387,77 @@ class TanksGame:
             self.fire_bullet(num_tank)
 
         new_distance_between = np.linalg.norm(np.array(position) - np.array(opponent_position))
-        new_angle_to_opponent = abs(self.get_angle_to_opponent(num_tank = num_tank))
+        new_angle_to_opponent = abs(self.get_angle_to_opponent(num_tank=num_tank))
 
-        self.update_bullets()           # Ensure bullets are updated every step
-        self.check_bullet_collisions()  # Ensure collisions are checked every step
+        self.update_bullets()
+        self.check_bullet_collisions()
 
         laser_distances = np.array(self.get_all_laser_distances(LASER_MAX_SIZE)[num_tank - 1])
 
-        # Reward for reducing the distance to the opponent while maintaining an optimal range
-        optimal_distance_max = 500
-        optimal_distance_min = 300
+        # Different reward structures for chaser (Tank 1) and fleeing tank (Tank 2)
+        if num_tank == 1:  # Chaser tank
+            # Reward for getting closer to the opponent
+            if new_distance_between < previous_distance_between:
+                tank.reward += 2
+            else:
+                tank.reward -= 1
 
-        if new_distance_between > optimal_distance_max and new_distance_between < previous_distance_between :
-            tank.reward += 1
-        elif new_distance_between < optimal_distance_min and new_distance_between > previous_distance_between :
-            tank.reward += 1
-        else :
-            tank.reward -= 0.5
+            # Extra reward for being very close to the opponent
+            if new_distance_between < 150:
+                tank.reward += 3
 
-        if new_angle_to_opponent <= previous_angle_to_opponent :
-            tank.reward += 1
-        elif new_angle_to_opponent > 0.1:
-            tank.reward -= 0.5
+            # Reward for keeping opponent in sight
+            if new_angle_to_opponent < previous_angle_to_opponent:
+                tank.reward += 2
+            elif new_angle_to_opponent > 0.1:
+                tank.reward -= 0.5
+                
+            if tank.in_line_of_sight:
+                tank.reward += 3
 
+        else:  # Fleeing tank (Tank 2)
+            optimal_distance = 500
+            # Reward for maintaining optimal distance
+            if new_distance_between > previous_distance_between and new_distance_between < 800:
+                tank.reward += 3
+            elif new_distance_between < 300:  # Penalty for being too close
+                tank.reward -= 5
+
+            # Reward for keeping distance 
+            if new_distance_between > optimal_distance :
+                tank.reward += 2
+
+            # Extra reward for successful evasion
+            if new_distance_between > previous_distance_between and new_distance_between > 400:
+                tank.reward += 2
+
+        # Common penalties for both tanks
         if self.is_head_against_the_wall(laser_distances):
-            tank.reward -= 5  # Penalty for bumping into the wall
+            tank.reward -= 5
+
         if tank.looking_block:
             tank.reward -= 1
 
         if opponent_tank.was_hit:
-            tank.reward += 300  # Large reward for hitting the opponent
+            tank.reward += 300
             opponent_tank.was_hit = False
 
         if tank.was_hit:
-            tank.reward -= 50  # Penalty for getting hit
+            tank.reward -= 300
             tank.was_hit = False
 
-        if tank.in_line_of_sight:
-            tank.reward += 5  # Reward for keeping the opponent in sight
-
-        if tank.number_of_ammo == 0:
-            tank.reward -= 60  # Penalty for running out of ammo
-
+        # Game end conditions
         if self.lost(tank):
-            tank.reward -= 1_000  # Heavy penalty for losing
+            tank.reward -= 1_000
             done = True
         elif self.lost(opponent_tank):
-            tank.reward += 1_500  # Large reward for winning
+            tank.reward += 1_500
             done = True
-        elif self.current_step > self.max_steps:
-            tank.reward -= 500
+        elif self.current_step > self.max_steps and num_tank == 1:
+            tank.reward -= 1_000
+            done = True
+        elif self.current_step > self.max_steps and num_tank == 2:
+            tank.reward += 1_000
             done = True
         else:
             done = False
