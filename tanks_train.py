@@ -33,7 +33,7 @@ def set_seed(seed=42):
 
 # Function to run a single episode
 # tanks_train.py
-def run_episode(agent_1, agent_2, epsilon, rendering, episode, render_every):
+def run_episode(agent_1 : TanksAgent, agent_2 : NoBrainBot, epsilon, rendering, episode, render_every):
     env = TanksGame(max_steps=MAX_STEPS)
     env.reset()
     done = False
@@ -42,18 +42,18 @@ def run_episode(agent_1, agent_2, epsilon, rendering, episode, render_every):
     while not done:
         # Agent 1
         state_1 = env.get_state(num_tank=1)
-        actions_1 = agent_1.get_action(state_1)
+        actions_1 = agent_1.get_action(state=state_1, epsilon=epsilon)
         next_state_1, reward_1, done, _ = env.step(actions_1, num_tank=1)
         agent_1.remember(state_1, actions_1, reward_1, next_state_1, done)
 
         # Agent 2
         state_2 = env.get_state(num_tank=2)
         actions_2 = agent_2.get_action(state_2)
-        next_state_2, reward_2, done, _ = env.step(actions_2, num_tank=2)
+        _, _, done, _ = env.step(actions_2, num_tank=2)
 
         total_reward_1 += reward_1
 
-        env.render(rendering=(episode % render_every == 0), clock = 2000)
+        env.render(rendering=True, clock = 2000, epsilon=epsilon)
 
     agent_1.train_model()
 
@@ -71,7 +71,6 @@ def main_training_loop(agent_1, agent_2, episodes, rendering, render_every = 10)
         # Save the trained models every 50 episodes
         if episode % 50 == 49:
             torch.save(agent_1.model.state_dict(), TANK_1_SAVE_WEIGHTS + f"_epoch_{episode+1}.pth")
-            torch.save(agent_2.model.state_dict(), TANK_2_SAVE_WEIGHTS + f"_epoch_{episode+1}.pth")
 
 
 if __name__ == "__main__":

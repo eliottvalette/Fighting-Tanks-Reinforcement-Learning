@@ -16,7 +16,7 @@ TANK_2_SPEED = 3
 ROTATION_ANGLE_1 = 0.6
 ROTATION_ANGLE_2 = 0.6
 TANK_SIZE = 70
-BULLET_DAMAGE = 34
+BULLET_DAMAGE = 20
 BLOCK_SIZE = 100
 LASER_MAX_SIZE = int(np.sqrt(SCREEN_WIDTH ** 2 + SCREEN_HEIGHT ** 2))
 
@@ -359,7 +359,7 @@ class TanksGame:
         opponent_tank = getattr(self, f'tank_{3 - num_tank}')
         opponent_position = getattr(self, f'position_{3 - num_tank}')
 
-        tank.reward = -0.5  # Base penalty for each step to encourage efficient behavior
+        tank.reward = 0  # Base penalty for each step to encourage efficient behavior
 
         move_action, rotate_action, strafe_action, fire_action = actions
 
@@ -393,70 +393,37 @@ class TanksGame:
 
         laser_distances = np.array(self.get_all_laser_distances(LASER_MAX_SIZE)[num_tank - 1])
 
-        # Different reward structures for chaser (Tank 1) and fleeing tank (Tank 2)
-        if num_tank == 1:  # Chaser tank
-            # Reward for getting closer to the opponent
-            if new_distance_between < previous_distance_between:
-                tank.reward += 2
-            else:
-                tank.reward -= 1
-
-            # Extra reward for being very close to the opponent
-            if new_distance_between < 150:
-                tank.reward += 3
-
-            # Reward for keeping opponent in sight
-            if new_angle_to_opponent < previous_angle_to_opponent:
-                tank.reward += 2
-            elif new_angle_to_opponent > 0.1:
-                tank.reward -= 0.5
-                
-            if tank.in_line_of_sight:
-                tank.reward += 3
-
-        else:  # Fleeing tank (Tank 2)
-            optimal_distance = 500
-            # Reward for maintaining optimal distance
-            if new_distance_between > previous_distance_between and new_distance_between < 800:
-                tank.reward += 3
-            elif new_distance_between < 300:  # Penalty for being too close
-                tank.reward -= 5
-
-            # Reward for keeping distance 
-            if new_distance_between > optimal_distance :
-                tank.reward += 2
-
-            # Extra reward for successful evasion
-            if new_distance_between > previous_distance_between and new_distance_between > 400:
-                tank.reward += 2
+        # Different reward structures for chaser (Tank 1)
+        if tank.in_line_of_sight:
+            tank.reward += 4
 
         # Common penalties for both tanks
         if self.is_head_against_the_wall(laser_distances):
-            tank.reward -= 5
+            tank.reward -= 2
 
         if tank.looking_block:
-            tank.reward -= 1
+            tank.reward -= 0.5
 
         if opponent_tank.was_hit:
-            tank.reward += 100
+            tank.reward += 5
             opponent_tank.was_hit = False
 
         if tank.was_hit:
-            tank.reward -= 100
+            tank.reward -= 5
             tank.was_hit = False
 
         # Game end conditions
         if self.lost(tank):
-            tank.reward -= 300
+            tank.reward -= 30
             done = True
         elif self.lost(opponent_tank):
-            tank.reward += 400
+            tank.reward += 30
             done = True
         elif self.current_step > self.max_steps and num_tank == 1:
-            tank.reward -= 300
+            tank.reward -= 30
             done = True
         elif self.current_step > self.max_steps and num_tank == 2:
-            tank.reward += 300
+            tank.reward += 30
             done = True
         else:
             done = False

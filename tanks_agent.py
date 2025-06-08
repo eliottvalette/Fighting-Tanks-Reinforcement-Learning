@@ -30,7 +30,7 @@ class TanksAgent:
         # Implement loading logic
         pass
 
-    def get_action(self, state, training=True):
+    def get_action(self, state, epsilon, training=True):
         state_tensor = torch.FloatTensor(state).unsqueeze(0).to(device)
         self.model.eval()
         with torch.no_grad():
@@ -39,7 +39,7 @@ class TanksAgent:
 
         actions = []
         for action_probs in action_probs_grouped:
-            if training and random.random() < 0.1:  # Add exploration
+            if training and random.random() < epsilon:  # Add exploration
                 action = random.randint(0, action_probs.size(1) - 1)
             else:
                 action = torch.argmax(action_probs, dim=1).item()
