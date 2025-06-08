@@ -30,7 +30,7 @@ class TanksAgent:
         # Implement loading logic
         pass
 
-    def act(self, state, training=True):
+    def get_action(self, state, training=True):
         state_tensor = torch.FloatTensor(state).unsqueeze(0).to(device)
         self.model.eval()
         with torch.no_grad():

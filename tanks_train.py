@@ -5,6 +5,7 @@ import pygame
 import torch
 import time
 from tanks_agent import TanksAgent
+from tanks_no_brain_bot import NoBrainBot
 from tanks_game import TanksGame
 import matplotlib.pyplot as plt
 
@@ -41,23 +42,20 @@ def run_episode(agent_1, agent_2, epsilon, rendering, episode, render_every):
     while not done:
         # Agent 1
         state_1 = env.get_state(num_tank=1)
-        actions_1 = agent_1.act(state_1)
+        actions_1 = agent_1.get_action(state_1)
         next_state_1, reward_1, done, _ = env.step(actions_1, num_tank=1)
         agent_1.remember(state_1, actions_1, reward_1, next_state_1, done)
 
         # Agent 2
         state_2 = env.get_state(num_tank=2)
-        actions_2 = agent_2.act(state_2)
+        actions_2 = agent_2.get_action(state_2)
         next_state_2, reward_2, done, _ = env.step(actions_2, num_tank=2)
-        agent_2.remember(state_2, actions_2, reward_2, next_state_2, done)
 
         total_reward_1 += reward_1
-        total_reward_2 += reward_2
 
         env.render(rendering=(episode % render_every == 0), clock = 2000)
 
     agent_1.train_model()
-    agent_2.train_model()
 
     return total_reward_1, total_reward_2, env.current_step  # Fix attribute name
 
@@ -89,20 +87,24 @@ if __name__ == "__main__":
         load_model = False,
     )
 
-    agent_2 = TanksAgent(
+    '''
+    agent_2 = NoBrainBot(
         state_size=STATE_SIZE,
         action_sizes=[3, 3, 3, 2], # [move, rotate, strafe, fire]
         gamma = GAMMA,
         learning_rate = ALPHA,
         load_model = False,
     )
+    '''
+
+    agent_2 = NoBrainBot(
+        state_size=STATE_SIZE,
+        action_sizes=[3, 3, 3, 2]
+    )
 
     if agent_1.load_model:
         print("Loading model 1 weights...")
         agent_1.model.load_state_dict(torch.load(TANK_1_WEIGHTS, weights_only=True))
-    if agent_2.load_model:
-        print("Loading model 2 weights...")
-        agent_2.model.load_state_dict(torch.load(TANK_2_WEIGHTS, weights_only=True))
 
     # Start the training loop
     main_training_loop(agent_1, agent_2, episodes = EPISODES, rendering = RENDERING, render_every = 1)

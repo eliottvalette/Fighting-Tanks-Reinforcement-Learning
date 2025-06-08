@@ -263,7 +263,6 @@ class TanksGame:
 
         return angle
 
-
     def standardize(self, value, mean, std):
         return np.where(std != 0, (value - mean) / std, value)
 
@@ -439,25 +438,25 @@ class TanksGame:
             tank.reward -= 1
 
         if opponent_tank.was_hit:
-            tank.reward += 300
+            tank.reward += 100
             opponent_tank.was_hit = False
 
         if tank.was_hit:
-            tank.reward -= 300
+            tank.reward -= 100
             tank.was_hit = False
 
         # Game end conditions
         if self.lost(tank):
-            tank.reward -= 1_000
+            tank.reward -= 300
             done = True
         elif self.lost(opponent_tank):
-            tank.reward += 1_500
+            tank.reward += 400
             done = True
         elif self.current_step > self.max_steps and num_tank == 1:
-            tank.reward -= 1_000
+            tank.reward -= 300
             done = True
         elif self.current_step > self.max_steps and num_tank == 2:
-            tank.reward += 1_000
+            tank.reward += 300
             done = True
         else:
             done = False
