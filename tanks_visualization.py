@@ -10,10 +10,12 @@ import json
 import pickle
 
 class TrainingVisualizer:
-    def __init__(self, save_dir="visualization_data"):
+    def __init__(self, save_dir_data="visualization_data", save_dir_png="visualization_png"):
         """Initialize the training visualizer with a directory to save data."""
-        self.save_dir = save_dir
-        os.makedirs(save_dir, exist_ok=True)
+        self.save_dir_data = save_dir_data
+        os.makedirs(save_dir_data, exist_ok=True)
+        self.save_dir_png = save_dir_png
+        os.makedirs(save_dir_png, exist_ok=True)
         
         # Initialize data structures to store metrics
         self.rewards_history = []
@@ -23,8 +25,11 @@ class TrainingVisualizer:
         self.action_distributions = []
         self.value_distributions = []
         
+        # New metrics for enhanced tracking
+        self.additional_metrics = defaultdict(list)  # For custom metrics like hit accuracy
+        
         # Create a consolidated metrics file that will be updated after each episode
-        self.metrics_file = os.path.join(save_dir, "all_metrics.json")
+        self.metrics_file = os.path.join(save_dir_data, "all_metrics.json")
         
     def record_episode(self, episode, reward, steps, epsilon, losses=None):
         """Record metrics for a completed episode."""
@@ -39,6 +44,11 @@ class TrainingVisualizer:
         # Save all metrics after every episode to ensure complete data
         self.save_metrics()
             
+    def record_additional_metrics(self, metrics_dict):
+        """Record additional custom metrics."""
+        for metric_name, value in metrics_dict.items():
+            self.additional_metrics[metric_name].append(value)
+            
     def record_actions_and_values(self, actions, values):
         """Record action and value distributions for analysis."""
         self.action_distributions.append(actions)
@@ -51,6 +61,7 @@ class TrainingVisualizer:
             'episode_lengths': self.episode_lengths,
             'epsilon': self.epsilon_history,
             'losses': dict(self.losses),
+            'additional_metrics': dict(self.additional_metrics)
         }
         
         # Save to the consolidated file (overwriting previous version)
@@ -61,17 +72,17 @@ class TrainingVisualizer:
         current_episode = len(self.rewards_history)
         if current_episode % 30 == 0:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            backup_file = os.path.join(self.save_dir, f"metrics_backup_ep{current_episode}_{timestamp}.json")
+            backup_file = os.path.join(self.save_dir_data, f"metrics_backup_ep{current_episode}_{timestamp}.json")
             with open(backup_file, 'w') as f:
                 json.dump(metrics, f)
             
             # Use pickle to save action distributions and values since they have heterogeneous shapes
             if self.action_distributions:
-                with open(os.path.join(self.save_dir, f"actions_ep{current_episode}_{timestamp}.pkl"), 'wb') as f:
+                with open(os.path.join(self.save_dir_data, f"actions_ep{current_episode}_{timestamp}.pkl"), 'wb') as f:
                     pickle.dump(self.action_distributions, f)
                     
             if self.value_distributions:
-                with open(os.path.join(self.save_dir, f"values_ep{current_episode}_{timestamp}.pkl"), 'wb') as f:
+                with open(os.path.join(self.save_dir_data, f"values_ep{current_episode}_{timestamp}.pkl"), 'wb') as f:
                     pickle.dump(self.value_distributions, f)
             
     def load_metrics(self, filename=None):
@@ -106,7 +117,7 @@ class TrainingVisualizer:
         plt.legend()
         
         # Save the figure
-        plt.savefig(os.path.join(self.save_dir, 'reward_curve.png'), dpi=300, bbox_inches='tight')
+        plt.savefig(os.path.join(self.save_dir_png, 'reward_curve.png'), dpi=300, bbox_inches='tight')
         plt.close()
         
     def plot_loss_curves(self):
@@ -128,7 +139,7 @@ class TrainingVisualizer:
         plt.yscale('log')  # Log scale often helps visualize loss curves
         
         # Save the figure
-        plt.savefig(os.path.join(self.save_dir, 'loss_curves.png'), dpi=300, bbox_inches='tight')
+        plt.savefig(os.path.join(self.save_dir_png, 'loss_curves.png'), dpi=300, bbox_inches='tight')
         plt.close()
         
     def plot_reward_histogram(self, bins=20):
@@ -145,7 +156,7 @@ class TrainingVisualizer:
         plt.legend()
         
         # Save the figure
-        plt.savefig(os.path.join(self.save_dir, 'reward_histogram.png'), dpi=300, bbox_inches='tight')
+        plt.savefig(os.path.join(self.save_dir_png, 'reward_histogram.png'), dpi=300, bbox_inches='tight')
         plt.close()
         
     def plot_action_distributions(self):
@@ -189,7 +200,7 @@ class TrainingVisualizer:
             axes[i].set_title(f'{action_type} Action Distribution')
             
         plt.tight_layout()
-        plt.savefig(os.path.join(self.save_dir, 'action_distribution.png'), dpi=300, bbox_inches='tight')
+        plt.savefig(os.path.join(self.save_dir_png, 'action_distribution.png'), dpi=300, bbox_inches='tight')
         plt.close()
         
     def plot_value_distribution(self):
@@ -214,7 +225,7 @@ class TrainingVisualizer:
         plt.legend()
         
         # Save the figure
-        plt.savefig(os.path.join(self.save_dir, 'value_distribution.png'), dpi=300, bbox_inches='tight')
+        plt.savefig(os.path.join(self.save_dir_png, 'value_distribution.png'), dpi=300, bbox_inches='tight')
         plt.close()
         
     def plot_epsilon_decay(self):
@@ -227,7 +238,7 @@ class TrainingVisualizer:
         plt.grid(True, alpha=0.3)
         
         # Save the figure
-        plt.savefig(os.path.join(self.save_dir, 'epsilon_decay.png'), dpi=300, bbox_inches='tight')
+        plt.savefig(os.path.join(self.save_dir_png, 'epsilon_decay.png'), dpi=300, bbox_inches='tight')
         plt.close()
         
     def plot_episode_lengths(self):
@@ -240,8 +251,30 @@ class TrainingVisualizer:
         plt.grid(True, alpha=0.3)
         
         # Save the figure
-        plt.savefig(os.path.join(self.save_dir, 'episode_lengths.png'), dpi=300, bbox_inches='tight')
+        plt.savefig(os.path.join(self.save_dir_png, 'episode_lengths.png'), dpi=300, bbox_inches='tight')
         plt.close()
+        
+    def plot_additional_metrics(self):
+        """Plot additional tracked metrics over time."""
+        if not self.additional_metrics:
+            return
+        
+        num_metrics = len(self.additional_metrics)
+        if num_metrics > 0:
+            fig, axes = plt.subplots(num_metrics, 1, figsize=(12, 4*num_metrics))
+            if num_metrics == 1:
+                axes = [axes]
+                
+            for i, (metric_name, values) in enumerate(self.additional_metrics.items()):
+                axes[i].plot(values)
+                axes[i].set_title(f'{metric_name.replace("_", " ").title()} over Episodes')
+                axes[i].set_xlabel('Episode')
+                axes[i].set_ylabel(metric_name.replace("_", " ").title())
+                axes[i].grid(True, alpha=0.3)
+            
+            plt.tight_layout()
+            plt.savefig(os.path.join(self.save_dir_png, 'additional_metrics.png'), dpi=300, bbox_inches='tight')
+            plt.close()
         
     def generate_all_plots(self):
         """Generate all available plots."""
@@ -252,6 +285,7 @@ class TrainingVisualizer:
         self.plot_value_distribution()
         self.plot_epsilon_decay()
         self.plot_episode_lengths()
+        self.plot_additional_metrics()
         
     def get_summary_statistics(self):
         """Calculate and return summary statistics of the training."""
@@ -263,6 +297,13 @@ class TrainingVisualizer:
             'std_reward': np.std(self.rewards_history) if self.rewards_history else None,
             'mean_episode_length': np.mean(self.episode_lengths) if self.episode_lengths else None,
         }
+        
+        # Add additional metrics if available
+        for metric_name, values in self.additional_metrics.items():
+            if values:
+                stats[f'mean_{metric_name}'] = np.mean(values)
+                stats[f'last_{metric_name}'] = values[-1] if values else None
+                
         return stats
         
     def create_learning_curve_comparison(self, other_metrics_files, labels):
@@ -293,7 +334,7 @@ class TrainingVisualizer:
         plt.legend()
         
         # Save the figure
-        plt.savefig(os.path.join(self.save_dir, 'learning_curve_comparison.png'), dpi=300, bbox_inches='tight')
+        plt.savefig(os.path.join(self.save_dir_png, 'learning_curve_comparison.png'), dpi=300, bbox_inches='tight')
         plt.close()
 
 # Helper function to extract model insights

@@ -13,7 +13,7 @@ from tanks_visualization import TrainingVisualizer
 from tanks_paths import TANK_1_WEIGHTS, TANK_2_WEIGHTS, TANK_1_SAVE_WEIGHTS, TANK_2_SAVE_WEIGHTS, RENDERING
 
 # Hyperparameters
-EPISODES = 500  # Increased to ensure convergence
+EPISODES = 5_000  # Increased to ensure convergence
 GAMMA = 0.99    # Standard discount factor
 ALPHA = 0.0005  # Reduced learning rate for stability
 GLOBAL_N = 11
@@ -46,7 +46,7 @@ def run_episode(agent_1 : TanksAgent, agent_2 : NoBrainBot, epsilon, rendering, 
     while not done:
         # Agent 1
         state_1 = env.get_state(num_tank=1)
-        actions_1 = agent_1.get_action(state=state_1, epsilon=epsilon)
+        actions_1 = agent_1.get_action(state=state_1, epsilon=epsilon, action_sizes=agent_1.action_sizes)
         next_state_1, reward_1, done, _ = env.step(actions_1, num_tank=1)
         agent_1.remember(state_1, actions_1, reward_1, next_state_1, done)
 

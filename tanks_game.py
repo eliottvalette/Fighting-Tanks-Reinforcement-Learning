@@ -9,12 +9,14 @@ from tanks_game_objects import Background, TankPlayer, Bullet, Block
 from tanks_paths import BACKGROUND, TANK_1_IMAGE, TANK_2_IMAGE, BULLET_IMAGE, CRATE_IMAGE, RENDERING
 
 
+DIFFICULTY = 0 # [0, 1]
+
 SCREEN_WIDTH = 1000
 SCREEN_HEIGHT = 700
 TANK_1_SPEED = 3
-TANK_2_SPEED = 3
+TANK_2_SPEED = 3 * DIFFICULTY
 ROTATION_ANGLE_1 = 0.6
-ROTATION_ANGLE_2 = 0.6
+ROTATION_ANGLE_2 = 0.6 * DIFFICULTY
 TANK_SIZE = 70
 BULLET_DAMAGE = 20
 BLOCK_SIZE = 100
@@ -394,30 +396,38 @@ class TanksGame:
         laser_distances = np.array(self.get_all_laser_distances(LASER_MAX_SIZE)[num_tank - 1])
 
         # Reward for maintaining optimal distance (not too far, not too close)
-        optimal_distance = 300  # Pixels
-        distance_reward = max(0, 1 - abs(new_distance_between - optimal_distance) / 300)
+        optimal_distance_max = 500  # Pixels
+        optimal_distance_min = 300  # Pixels
+        distance_reward = max(0, 1 - abs(new_distance_between - optimal_distance_max) / optimal_distance_max)
         tank.reward += distance_reward
 
-        # Reward for facing the opponent (angular alignment)
-        angle_reward = max(0, 1 - new_angle_to_opponent / np.pi)
-        tank.reward += 2 * angle_reward  # Increased importance of facing opponent
+        if new_distance_between < previous_distance_between:
+            if new_distance_between > optimal_distance_max:
+                tank.reward += 0.5  
+            else:
+                tank.reward -= 0.5
+        elif new_distance_between > previous_distance_between:
+            if new_distance_between < optimal_distance_min:
+                tank.reward += 0.5
+            else:
+                tank.reward -= 0.5
+
+        # Penalty for not facing the opponent
+        tank.reward -= 5 * abs(new_angle_to_opponent)
 
         # Reward for getting better angle/position compared to previous
-        if new_angle_to_opponent < previous_angle_to_opponent:
+        if abs(new_angle_to_opponent) < abs(previous_angle_to_opponent):
             tank.reward += 0.2  # Reward for improving angle
 
         # Reward for line of sight and successful firing strategy
         if tank.in_line_of_sight:
-            tank.reward += 2
-            if fire_action == 0 and tank.check_cooldown(time.time()):  # Reward for firing when ready and in sight
-                tank.reward += 1
+            tank.reward += 0.5
+            if fire_action == 0 :  # Reward for firing when ready and in sight
+                tank.reward += 3
 
         # Penalties
         if self.is_head_against_the_wall(laser_distances):
             tank.reward -= 3  # Increased penalty for being against wall
-
-        if tank.looking_block:
-            tank.reward -= 1  # Increased penalty for looking at obstacles
 
         # Reward for hitting and penalties for being hit
         if opponent_tank.was_hit:
@@ -476,19 +486,32 @@ class TanksGame:
     
     def draw_text(self, tank, num_tank, epsilon=None):
         score_font = pygame.font.Font(pygame.font.get_default_font(), 14)
-        background_color = (161, 155, 88)  # White semi-transparent background
+        background_color = (161, 155, 88)  # Desert-like background
 
         if num_tank == 1:
-            score_text = score_font.render(f"[Tank 1] Current reward : {tank.total_reward:.2f} Health = {tank.health}%", True, (0, 0, 0))
+            score_text = score_font.render(f"[Tank 1] Total reward: {tank.total_reward:.2f} Health: {tank.health}%", True, (0, 0, 0))
             score_rect = score_text.get_rect()
             score_rect.topleft = (10, 10)
+            
+            # Add current reward display
+            reward_text = score_font.render(f"Current reward: {tank.reward:.2f}", True, (0, 0, 0))
+            reward_rect = reward_text.get_rect()
+            reward_rect.topleft = (10, 30)
         else:
-            score_text = score_font.render(f"[Tank 2] Current reward : {tank.total_reward:.2f} Health = {tank.health}%", True, (0, 0, 0))
+            score_text = score_font.render(f"[Tank 2] Total reward: {tank.total_reward:.2f} Health: {tank.health}%", True, (0, 0, 0))
             score_rect = score_text.get_rect()
             score_rect.topright = (SCREEN_WIDTH - 10, 10)
+            
+            # Add current reward display
+            reward_text = score_font.render(f"Current reward: {tank.reward:.2f}", True, (0, 0, 0))
+            reward_rect = reward_text.get_rect()
+            reward_rect.topright = (SCREEN_WIDTH - 10, 30)
 
         pygame.draw.rect(self.screen, background_color, score_rect.inflate(10, 10))
         self.screen.blit(score_text, score_rect)
+        
+        pygame.draw.rect(self.screen, background_color, reward_rect.inflate(10, 10))
+        self.screen.blit(reward_text, reward_rect)
 
         if epsilon is not None:
             epsilon_text = score_font.render(f"Randomness: {epsilon * 100:.1f}%", True, (0, 0, 0))
@@ -558,6 +581,10 @@ if __name__ == "__main__":
 
     run = True
 
+    # Initialize rewards
+    game.tank_1.total_reward = 0
+    game.tank_2.total_reward = 0
+
     # Main loop
     while run:
 
@@ -566,6 +593,14 @@ if __name__ == "__main__":
         for event in pygame.event.get():
             if event.type == pygame.QUIT or keys[pygame.K_ESCAPE]:
                 run = False
+
+        # Calculate rewards for both tanks
+        game.tank_1.reward = 0
+        game.tank_2.reward = 0
+
+        previous_distance = np.linalg.norm(np.array(game.position_1) - np.array(game.position_2))
+        previous_angle_1 = abs(game.get_angle_to_opponent(num_tank=1))
+        previous_angle_2 = abs(game.get_angle_to_opponent(num_tank=2))
 
         # first Player
         if keys[pygame.K_q]:
@@ -600,6 +635,8 @@ if __name__ == "__main__":
         
         if keys[pygame.K_r]:
             game.reset()
+            game.tank_1.total_reward = 0
+            game.tank_2.total_reward = 0
         
         if keys[pygame.K_g]:
             state_1 = game.get_state(num_tank=1)
@@ -646,12 +683,70 @@ if __name__ == "__main__":
 
             time.sleep(0.1)
 
-        # Check for bullet hits
+        # Check for bullet collisions
         game.check_bullet_collisions()
+        
+        # Update rewards based on game state
+        new_distance = np.linalg.norm(np.array(game.position_1) - np.array(game.position_2))
+        new_angle_1 = abs(game.get_angle_to_opponent(num_tank=1))
+        new_angle_2 = abs(game.get_angle_to_opponent(num_tank=2))
+        
+        # Calculate rewards using same logic as in step method
+        for i, tank in enumerate([game.tank_1, game.tank_2]):
+            num_tank = i + 1
+            opponent_tank = game.tank_1 if i == 1 else game.tank_2
+            opponent_position = game.position_1 if i == 1 else game.position_2
+            position = game.position_2 if i == 1 else game.position_1
+            previous_angle = previous_angle_2 if i == 1 else previous_angle_1
+            new_angle = new_angle_2 if i == 1 else new_angle_1
+            
+            # Base penalty for each frame
+            tank.reward = -0.1
+            
+            # Reward for maintaining optimal distance
+            optimal_distance_max = 500  # Pixels
+            optimal_distance_min = 300  # Pixels
+            distance_reward = max(0, 1 - abs(new_distance - optimal_distance_max) / optimal_distance_max)
+            tank.reward += distance_reward
+
+            print('new_distance', new_distance)
+
+            if new_distance < previous_distance :
+                if new_distance > optimal_distance_max:
+                    tank.reward += 0.5
+                else:
+                    tank.reward -= 0.5
+            elif new_distance > previous_distance:
+                if new_distance < optimal_distance_min:
+                    tank.reward += 0.5
+                else:
+                    tank.reward -= 0.5
+            
+            # Penalty for not facing the opponent
+            tank.reward -= 5 * new_angle
+            
+            # Reward for getting better angle/position
+            if new_angle < previous_angle:
+                tank.reward += 0.2
+                
+            # Reward for line of sight
+            if tank.in_line_of_sight:
+                tank.reward += 2
+                
+            # Penalties
+            laser_distances = np.array(game.get_all_laser_distances(LASER_MAX_SIZE)[num_tank - 1])
+            if game.is_head_against_the_wall(laser_distances):
+                tank.reward -= 3
+                
+            # Update total reward
+            tank.total_reward += tank.reward
+        
+        if game.tank_1.health <= 0 or game.tank_2.health <= 0:
+            game.reset()
+            game.tank_1.total_reward = 0
+            game.tank_2.total_reward = 0
 
         # Render everything
         game.render(rendering=True, clock=300)
 
         pygame.display.flip()
-
-# TODO : ADD power-ups and heals
