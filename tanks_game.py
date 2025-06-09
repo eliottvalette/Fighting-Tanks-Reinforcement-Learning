@@ -425,6 +425,9 @@ class TanksGame:
             if fire_action == 0 :  # Reward for firing when ready and in sight
                 tank.reward += 3
 
+        # The lower the health of the opponent, the higher the reward
+        tank.reward += 3 * (1 - 0.01 * opponent_tank.health)
+
         # Penalties
         if self.is_head_against_the_wall(laser_distances):
             tank.reward -= 3  # Increased penalty for being against wall
