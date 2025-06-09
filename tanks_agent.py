@@ -52,7 +52,7 @@ class TanksAgent:
 
     def train_model(self):
         if len(self.memory) < 128:  # Minimum batch size
-            return
+            return {"policy_loss": 0, "value_loss": 0, "entropy_loss": 0, "total_loss": 0}
 
         batch = random.sample(self.memory, 128)
         states, actions, rewards, next_states, dones = zip(*batch)
@@ -96,3 +96,11 @@ class TanksAgent:
         total_loss.backward()
         nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
         self.optimizer.step()
+        
+        # Return loss values for visualization
+        return {
+            "policy_loss": policy_loss.item(),
+            "value_loss": value_loss.item(),
+            "entropy_loss": entropy_loss.item(),
+            "total_loss": total_loss.item()
+        }

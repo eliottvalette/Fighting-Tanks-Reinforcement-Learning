@@ -39,7 +39,7 @@ class TanksGame:
 
         self.last_laser_update = time.time()
         self.laser_update_interval = 0.1  # Adjust this interval based on your needs
-        self.cached_laser_distances = [[0, 0, 0, 0, 0], [0, 0, 0, 0, 0]]  # Initial cache for laser distances
+        self.cached_laser_distances = [[0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0]]  # Initial cache for laser distances
 
         self.middle_block = Block(image_file=CRATE_IMAGE, location=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2), width=BLOCK_SIZE, height=BLOCK_SIZE * 2, rendering=RENDERING)
 
@@ -228,7 +228,7 @@ class TanksGame:
     def get_all_laser_distances(self, max_distance):
         current_time = time.time()
         if current_time - self.last_laser_update > self.laser_update_interval:
-            directions = [0, 20, 90, 270, 340]
+            directions = [0, 20, 90, 180, 270, 340]
             self.cached_laser_distances = [
                 [self.cast_laser(direction - self.tank_1.direction, max_distance, 1) for direction in directions],
                 [self.cast_laser(direction - self.tank_2.direction, max_distance, 2) for direction in directions]
@@ -359,7 +359,7 @@ class TanksGame:
         opponent_tank = getattr(self, f'tank_{3 - num_tank}')
         opponent_position = getattr(self, f'position_{3 - num_tank}')
 
-        tank.reward = 0  # Base penalty for each step to encourage efficient behavior
+        tank.reward = -0.1  # Base penalty for each step to encourage efficient behavior
 
         move_action, rotate_action, strafe_action, fire_action = actions
 
@@ -393,37 +393,53 @@ class TanksGame:
 
         laser_distances = np.array(self.get_all_laser_distances(LASER_MAX_SIZE)[num_tank - 1])
 
-        # Different reward structures for chaser (Tank 1)
-        if tank.in_line_of_sight:
-            tank.reward += 4
+        # Reward for maintaining optimal distance (not too far, not too close)
+        optimal_distance = 300  # Pixels
+        distance_reward = max(0, 1 - abs(new_distance_between - optimal_distance) / 300)
+        tank.reward += distance_reward
 
-        # Common penalties for both tanks
+        # Reward for facing the opponent (angular alignment)
+        angle_reward = max(0, 1 - new_angle_to_opponent / np.pi)
+        tank.reward += 2 * angle_reward  # Increased importance of facing opponent
+
+        # Reward for getting better angle/position compared to previous
+        if new_angle_to_opponent < previous_angle_to_opponent:
+            tank.reward += 0.2  # Reward for improving angle
+
+        # Reward for line of sight and successful firing strategy
+        if tank.in_line_of_sight:
+            tank.reward += 2
+            if fire_action == 0 and tank.check_cooldown(time.time()):  # Reward for firing when ready and in sight
+                tank.reward += 1
+
+        # Penalties
         if self.is_head_against_the_wall(laser_distances):
-            tank.reward -= 2
+            tank.reward -= 3  # Increased penalty for being against wall
 
         if tank.looking_block:
-            tank.reward -= 0.5
+            tank.reward -= 1  # Increased penalty for looking at obstacles
 
+        # Reward for hitting and penalties for being hit
         if opponent_tank.was_hit:
-            tank.reward += 5
+            tank.reward += 10  # Increased reward for successful hit
             opponent_tank.was_hit = False
 
         if tank.was_hit:
-            tank.reward -= 5
+            tank.reward -= 8  # Adjusted penalty for being hit
             tank.was_hit = False
 
         # Game end conditions
         if self.lost(tank):
-            tank.reward -= 30
+            tank.reward -= 50  # Increased penalty for losing
             done = True
         elif self.lost(opponent_tank):
-            tank.reward += 30
+            tank.reward += 50  # Increased reward for winning
             done = True
         elif self.current_step > self.max_steps and num_tank == 1:
-            tank.reward -= 30
+            tank.reward -= 20  # Time limit reached
             done = True
         elif self.current_step > self.max_steps and num_tank == 2:
-            tank.reward += 30
+            tank.reward += 20  # Time limit reached
             done = True
         else:
             done = False
@@ -442,7 +458,7 @@ class TanksGame:
             pygame.draw.rect(self.screen, (41, 79, 23), self.tank_2.rect, 2)    # Green hitbox for tank 2
 
     def draw_laser(self, tank, position, laser_distances, num_tank):
-        laser_angles = [0, 20, 90, 270, 340]
+        laser_angles = [0, 20, 90, 180, 270, 340]
         for i, direction in enumerate(laser_angles):
             laser_angle = direction  # save laser angle value
             direction -= tank.direction
