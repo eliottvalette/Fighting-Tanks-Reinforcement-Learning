@@ -148,9 +148,5 @@ if __name__ == "__main__":
         action_sizes=[3, 3, 3, 2]
     )
 
-    if agent_1.load_model:
-        print("Loading model 1 weights...")
-        # Loading is handled in the agent's __init__ method now
-
     # Start the training loop
     main_training_loop(agent_1, agent_2, episodes=EPISODES, rendering=RENDERING, render_every=10)

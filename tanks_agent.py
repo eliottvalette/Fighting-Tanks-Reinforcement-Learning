@@ -51,7 +51,6 @@ class TanksAgent:
         except Exception as e:
             print(f"Error saving model weights: {e}")
     
-
     def get_action(self, state, epsilon, action_sizes, training=True):
         state_tensor = torch.FloatTensor(state).unsqueeze(0).to(device)
         self.model.eval()
@@ -60,20 +59,27 @@ class TanksAgent:
         self.model.train()
 
         actions = []
-        for idx, action_prob in enumerate(action_probs[0]):  # Access first batch element
-            if training and random.random() < epsilon:  # Add exploration
-                action = random.randint(0, action_sizes[idx] - 1)
+        offset = 0
+        
+        # Process each action type with its corresponding probabilities
+        for i, size in enumerate(action_sizes):
+            # Extract the probabilities for this action type
+            probs = action_probs[0, offset:offset+size]
+            
+            # Determine action based on probabilities or random choice for exploration
+            if training and random.random() < epsilon:
+                action = random.randint(0, size-1)
             else:
-                if action_sizes[idx] == 3:
-                    action = 0 if action_prob.item() > 0.0 else 1 if action_prob.item() < -0.0 else 2
-                elif action_sizes[idx] == 2:
-                    action = 0 if action_prob.item() > 0.0 else 1
-                    
+                # Choose action with highest probability
+                action = torch.argmax(probs).item()
+                
             actions.append(action)
-
+            offset += size
+            
         return actions
 
     def remember(self, state, actions, reward, next_state, done):
+        reward *= 0.01
         self.memory.append((state, actions, reward, next_state, done))
 
     def train_model_batch(self):
@@ -87,6 +93,7 @@ class TanksAgent:
         next_states = torch.FloatTensor(next_states).to(device)
         rewards = torch.FloatTensor(rewards).to(device)
         dones = torch.FloatTensor(dones).to(device)
+        actions_tensor = torch.tensor(actions).to(device)
 
         # Get current policy and value predictions
         action_probs, state_values = self.model(states)
@@ -100,56 +107,32 @@ class TanksAgent:
         td_targets = rewards + self.gamma * next_state_values * (1 - dones)
         advantages = td_targets - state_values.squeeze(-1)
 
-        # Policy loss - fixed to handle the tensor shape correctly
+        # Policy loss - handle each action type separately
         policy_loss = 0
-        actions_tensor = torch.tensor(actions).to(device)
+        entropy_loss = 0
+        offset = 0
         
-        # Handle each action type separately
-        for i in range(action_probs.size(1)):  # Iterate over each action dimension
-            # Convert tanh output to probabilities for each action type
-            action_dim = self.action_sizes[i]  # Get number of actions for this type
+        for i, size in enumerate(self.action_sizes):
+            # Extract probabilities for this action type
+            probs = action_probs[:, offset:offset+size]
             
-            # For binary actions (fire/no fire)
-            if action_dim == 2:
-                # Convert tanh output (-1 to 1) to probabilities for binary actions
-                probs_i = torch.sigmoid(action_probs[:, i]).unsqueeze(1)
-                probs = torch.cat([probs_i, 1-probs_i], dim=1)
-                action_i = actions_tensor[:, i]
-                log_probs = torch.log(torch.gather(probs, 1, action_i.unsqueeze(1)) + 1e-10)
-                policy_loss -= torch.mean(log_probs.squeeze() * advantages.detach())
-                
-                # Entropy for binary actions
-                entropy_loss_i = -torch.mean(probs * torch.log(probs + 1e-10))
+            # Get the actions taken for this type
+            action_i = actions_tensor[:, i]
             
-            # For trinary actions (move, rotate, strafe)
-            elif action_dim == 3:
-                # Convert tanh output to probabilities for 3 actions using thresholds
-                # Create a 3-class probability distribution
-                tanh_val = action_probs[:, i]
-                
-                # For values > 0.2, action 0 is more likely
-                # For values < -0.2, action 1 is more likely
-                # Otherwise, action 2 is more likely
-                probs_0 = torch.clamp((tanh_val - 0.2) / 0.8, 0, 1)
-                probs_1 = torch.clamp((-0.2 - tanh_val) / 0.8, 0, 1)
-                probs_2 = 1.0 - probs_0 - probs_1
-                
-                probs = torch.stack([probs_0, probs_1, probs_2], dim=1)
-                probs = torch.clamp(probs, 1e-10, 1.0)  # Ensure valid probabilities
-                probs = probs / probs.sum(dim=1, keepdim=True)  # Normalize
-                
-                action_i = actions_tensor[:, i]
-                log_probs = torch.log(torch.gather(probs, 1, action_i.unsqueeze(1)))
-                policy_loss -= torch.mean(log_probs.squeeze() * advantages.detach())
-                
-                # Entropy for trinary actions
-                entropy_loss_i = -torch.mean(torch.sum(probs * torch.log(probs + 1e-10), dim=1))
+            # Calculate log probabilities of chosen actions
+            log_probs = torch.log(torch.gather(probs, 1, action_i.unsqueeze(1)) + 1e-10)
+            
+            # Policy gradient loss: -log(π(a|s)) * advantage
+            policy_loss -= torch.mean(log_probs.squeeze() * advantages.detach())
+            
+            # Entropy loss for exploration: -Σ π(a|s) * log(π(a|s))
+            entropy_i = -torch.mean(torch.sum(probs * torch.log(probs + 1e-10), dim=1))
+            entropy_loss += entropy_i
+            
+            offset += size
 
         # Value loss
         value_loss = torch.mean((state_values.squeeze(-1) - td_targets.detach()) ** 2)
-
-        # Entropy loss (for exploration)
-        entropy_loss = entropy_loss_i  # Use the last calculated entropy
 
         # Total loss
         total_loss = policy_loss + self.value_loss_coeff * value_loss - self.entropy_coeff * entropy_loss
@@ -175,7 +158,7 @@ class TanksAgent:
         # Convert inputs to tensors
         state = torch.FloatTensor(state).unsqueeze(0).to(device)
         next_state = torch.FloatTensor(next_state).unsqueeze(0).to(device)
-        reward = torch.FloatTensor([reward]).to(device)
+        reward = torch.FloatTensor([reward * 0.01]).to(device)
         done = torch.FloatTensor([done]).to(device)
         actions = torch.tensor([actions]).to(device)
 
@@ -191,43 +174,29 @@ class TanksAgent:
         td_target = reward + self.gamma * next_state_values * (1 - done)
         advantage = td_target - state_values.squeeze(-1)
 
-        # Policy loss
+        # Policy loss - handle each action type separately
         policy_loss = 0
+        entropy_loss = 0
+        offset = 0
         
-        # Handle each action type separately
-        for i in range(action_probs.size(1)):
-            action_dim = self.action_sizes[i]
+        for i, size in enumerate(self.action_sizes):
+            # Extract probabilities for this action type
+            probs = action_probs[:, offset:offset+size]
             
-            # For binary actions (fire/no fire)
-            if action_dim == 2:
-                probs_i = torch.sigmoid(action_probs[:, i]).unsqueeze(1)
-                probs = torch.cat([probs_i, 1-probs_i], dim=1)
-                action_i = actions[:, i]
-                log_probs = torch.log(torch.gather(probs, 1, action_i.unsqueeze(1)) + 1e-10)
-                policy_loss -= log_probs.squeeze() * advantage.detach()
-                
-                # Entropy for binary actions
-                entropy_loss = -torch.mean(probs * torch.log(probs + 1e-10))
+            # Get the action taken for this type
+            action_i = actions[:, i]
             
-            # For trinary actions (move, rotate, strafe)
-            elif action_dim == 3:
-                tanh_val = action_probs[:, i]
-                
-                # Convert tanh output to probabilities for 3 actions
-                probs_0 = torch.clamp((tanh_val - 0.2) / 0.8, 0, 1)
-                probs_1 = torch.clamp((-0.2 - tanh_val) / 0.8, 0, 1)
-                probs_2 = 1.0 - probs_0 - probs_1
-                
-                probs = torch.stack([probs_0, probs_1, probs_2], dim=1)
-                probs = torch.clamp(probs, 1e-10, 1.0)
-                probs = probs / probs.sum(dim=1, keepdim=True)
-                
-                action_i = actions[:, i]
-                log_probs = torch.log(torch.gather(probs, 1, action_i.unsqueeze(1)))
-                policy_loss -= log_probs.squeeze() * advantage.detach()
-                
-                # Entropy for trinary actions
-                entropy_loss = -torch.mean(torch.sum(probs * torch.log(probs + 1e-10), dim=1))
+            # Calculate log probability of chosen action
+            log_prob = torch.log(torch.gather(probs, 1, action_i.unsqueeze(1)) + 1e-10)
+            
+            # Policy gradient loss: -log(π(a|s)) * advantage
+            policy_loss -= log_prob.squeeze() * advantage.detach()
+            
+            # Entropy loss for exploration: -Σ π(a|s) * log(π(a|s))
+            entropy_i = -torch.mean(torch.sum(probs * torch.log(probs + 1e-10), dim=1))
+            entropy_loss += entropy_i
+            
+            offset += size
 
         # Value loss
         value_loss = (state_values.squeeze(-1) - td_target.detach()) ** 2

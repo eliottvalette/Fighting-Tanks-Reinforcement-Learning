@@ -19,10 +19,32 @@ class ActorCriticModel(nn.Module):
         )
 
         # Advantage stream - split into separate heads for each action type
-        self.advantage_streams = nn.Sequential(
+        self.movement_stream = nn.Sequential(
             nn.Linear(256, 128),
             nn.GELU(),
-            nn.Linear(128, len(action_sizes))
+            nn.Linear(128, 3),
+            nn.Softmax(dim=1)
+        )
+
+        self.rotate_stream = nn.Sequential(
+            nn.Linear(256, 128),
+            nn.GELU(),
+            nn.Linear(128, 3),
+            nn.Softmax(dim=1)
+        )
+
+        self.strafe_stream = nn.Sequential(
+            nn.Linear(256, 128),
+            nn.GELU(),
+            nn.Linear(128, 3),
+            nn.Softmax(dim=1)
+        )
+
+        self.fire_stream = nn.Sequential(
+            nn.Linear(256, 128),
+            nn.GELU(),
+            nn.Linear(128, 2),
+            nn.Softmax(dim=1)
         )
 
         # Value stream with deeper architecture
@@ -59,11 +81,12 @@ class ActorCriticModel(nn.Module):
         shared_features = self.shared_layers(state)
 
         # Actor: Predict action probabilities for all actions using separate advantage streams
-        logits = self.advantage_streams(shared_features)
-        
-        # Apply scaling to prevent tanh saturation
-        scaled_logits = logits * 0.1
-        action_probs = F.tanh(scaled_logits)
+        movement_probs = self.movement_stream(shared_features)
+        rotate_probs = self.rotate_stream(shared_features)
+        strafe_probs = self.strafe_stream(shared_features)
+        fire_probs = self.fire_stream(shared_features)
+
+        action_probs = torch.cat([movement_probs, rotate_probs, strafe_probs, fire_probs], dim=1)
         
         # Critic: Predict state value with scaling to prevent large values
         state_value = self.value_stream(shared_features) * 0.01  # Reduced scaling factor
@@ -73,9 +96,12 @@ class ActorCriticModel(nn.Module):
             self.train()
             
         if rd.random() < 0.001 and not was_single:
-            print('logits', logits)
-            print('scaled_logits', scaled_logits)
-            print('probs', action_probs)
-            print('state_value', state_value)
+            print('________________________')
+            print('action_probs_movement :', movement_probs)
+            print('action_probs_rotate :', rotate_probs)
+            print('action_probs_strafe :', strafe_probs)
+            print('action_probs_fire :', fire_probs)
+            print('state_value :', state_value)
+            print('________________________')
 
         return action_probs, state_value

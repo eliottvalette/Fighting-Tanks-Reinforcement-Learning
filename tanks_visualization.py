@@ -30,6 +30,9 @@ class TrainingVisualizer:
         
         # Create a consolidated metrics file that will be updated after each episode
         self.metrics_file = os.path.join(save_dir_data, "all_metrics.json")
+        self.backup_metrics_file = os.path.join(save_dir_data, "metrics_backup.json")
+        self.backup_actions_file = os.path.join(save_dir_data, "actions_backup.pkl")
+        self.backup_values_file = os.path.join(save_dir_data, "values_backup.pkl")
         
     def record_episode(self, episode, reward, steps, epsilon, losses=None):
         """Record metrics for a completed episode."""
@@ -68,21 +71,20 @@ class TrainingVisualizer:
         with open(self.metrics_file, 'w') as f:
             json.dump(metrics, f)
             
-        # Every 30 episodes, also create a timestamped backup
+        # Every 30 episodes, also create a backup (overwriting previous backup)
         current_episode = len(self.rewards_history)
         if current_episode % 30 == 0:
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            backup_file = os.path.join(self.save_dir_data, f"metrics_backup_ep{current_episode}_{timestamp}.json")
-            with open(backup_file, 'w') as f:
+            # Save metrics backup (overwriting previous backup)
+            with open(self.backup_metrics_file, 'w') as f:
                 json.dump(metrics, f)
             
-            # Use pickle to save action distributions and values since they have heterogeneous shapes
+            # Use pickle to save action distributions and values (overwriting previous backups)
             if self.action_distributions:
-                with open(os.path.join(self.save_dir_data, f"actions_ep{current_episode}_{timestamp}.pkl"), 'wb') as f:
+                with open(self.backup_actions_file, 'wb') as f:
                     pickle.dump(self.action_distributions, f)
                     
             if self.value_distributions:
-                with open(os.path.join(self.save_dir_data, f"values_ep{current_episode}_{timestamp}.pkl"), 'wb') as f:
+                with open(self.backup_values_file, 'wb') as f:
                     pickle.dump(self.value_distributions, f)
             
     def load_metrics(self, filename=None):
