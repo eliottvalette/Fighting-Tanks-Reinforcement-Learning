@@ -15,7 +15,7 @@ from tanks_paths import TANK_1_WEIGHTS, TANK_2_WEIGHTS, TANK_1_SAVE_WEIGHTS, TAN
 # Hyperparameters
 EPISODES = 5_000  # Increased to ensure convergence
 GAMMA = 0.99    # Standard discount factor
-ALPHA = 0.0005  # Reduced learning rate for stability
+ALPHA = 0.0001  # Further reduced learning rate for stability
 GLOBAL_N = 11
 MAX_STEPS = 2000  # Round number
 EPS_DECAY = 0.99  # Slower decay for better exploration
@@ -42,8 +42,10 @@ def run_episode(agent_1 : TanksAgent, agent_2 : NoBrainBot, epsilon, rendering, 
     # For collecting action distributions
     episode_actions = []
     episode_values = []
+    step_count = 0
 
-    while not done:
+    while not done and step_count < MAX_STEPS:
+        step_count += 1
         # Agent 1
         state_1 = env.get_state(num_tank=1)
         actions_1 = agent_1.get_action(state=state_1, epsilon=epsilon, action_sizes=agent_1.action_sizes)
@@ -66,18 +68,24 @@ def run_episode(agent_1 : TanksAgent, agent_2 : NoBrainBot, epsilon, rendering, 
 
         total_reward_1 += reward_1
 
-        if rendering and (episode % render_every == 0):
-            env.render(rendering=True, clock=2000, epsilon=epsilon)
+        # Train the agent with online single-step updates
+        loss = agent_1.train_model_single(state_1, actions_1, reward_1, next_state_1, done)
 
-    # Train the agent
-    losses = agent_1.train_model()
+        if rendering and (episode % render_every == 0):
+            env.render(rendering=True, clock=60, epsilon=epsilon)  # Reduced clock speed for better visualization
+
+    # Additional batch training at the end of the episode
+    if len(agent_1.memory) >= 16:
+        losses = agent_1.train_model_batch()
+    else:
+        losses = {}
     
     # Record metrics if visualizer is provided
     if visualizer:
-        visualizer.record_episode(episode, total_reward_1, env.current_step, epsilon, losses)
+        visualizer.record_episode(episode, total_reward_1, step_count, epsilon, losses)
         visualizer.record_actions_and_values(episode_actions, episode_values)
 
-    return total_reward_1, total_reward_2, env.current_step
+    return total_reward_1, total_reward_2, step_count
 
 # Main Training Loop
 def main_training_loop(agent_1, agent_2, episodes, rendering, render_every=10):
@@ -87,7 +95,7 @@ def main_training_loop(agent_1, agent_2, episodes, rendering, render_every=10):
     rewards_history = []
     
     for episode in range(episodes):
-        epsilon = np.clip(0.5 * EPS_DECAY ** episode, 0.01, 0.5)
+        epsilon = max(0.05, 0.5 * (EPS_DECAY ** episode))  # Better epsilon annealing schedule
         
         total_reward_1, total_reward_2, steps = run_episode(
             agent_1, agent_2, epsilon, rendering, episode, render_every, visualizer
@@ -95,11 +103,15 @@ def main_training_loop(agent_1, agent_2, episodes, rendering, render_every=10):
         
         rewards_history.append(total_reward_1)
         
-        print(f'Episode: {episode + 1}, Total Reward Agent 1: {total_reward_1:.2f}, Total Reward Agent 2: {total_reward_2:.2f}, Steps: {steps}, Randomness: {epsilon:.2%}')
+        print(f'Episode: {episode + 1}, Total Reward Agent 1: {total_reward_1:.2f}, Steps: {steps}, Randomness: {epsilon:.2%}')
+
+        # Learning rate decay
+        if episode > 0 and episode % 100 == 0:
+            agent_1.adjust_learning_rate(0.95)  # Reduce learning rate by 5% every 100 episodes
 
         # Save the trained models and generate visualizations every 30 episodes
         if episode % 30 == 29:
-            torch.save(agent_1.model.state_dict(), TANK_1_SAVE_WEIGHTS + f"_epoch_{episode+1}.pth")
+            agent_1.save(TANK_1_SAVE_WEIGHTS + f"_epoch_{episode+1}.pth")
             
             # Generate visualizations every 30 episodes
             visualizer.generate_all_plots()
@@ -122,20 +134,14 @@ if __name__ == "__main__":
     agent_1 = TanksAgent(
         state_size=STATE_SIZE,
         action_sizes=[3, 3, 3, 2], # [move, rotate, strafe, fire]
-        gamma = GAMMA,
-        learning_rate = ALPHA,
-        load_model = False,
+        gamma=GAMMA,
+        learning_rate=ALPHA,
+        entropy_coeff=0.02,  # Increased for more exploration
+        value_loss_coeff=0.5,
+        load_model=False,
     )
-
-    '''
-    agent_2 = NoBrainBot(
-        state_size=STATE_SIZE,
-        action_sizes=[3, 3, 3, 2], # [move, rotate, strafe, fire]
-        gamma = GAMMA,
-        learning_rate = ALPHA,
-        load_model = False,
-    )
-    '''
+    # Set agent identity for loading models
+    agent_1.is_agent_1 = True
 
     agent_2 = NoBrainBot(
         state_size=STATE_SIZE,
@@ -144,7 +150,7 @@ if __name__ == "__main__":
 
     if agent_1.load_model:
         print("Loading model 1 weights...")
-        agent_1.model.load_state_dict(torch.load(TANK_1_WEIGHTS, weights_only=True))
+        # Loading is handled in the agent's __init__ method now
 
     # Start the training loop
-    main_training_loop(agent_1, agent_2, episodes=EPISODES, rendering=RENDERING, render_every=1)
+    main_training_loop(agent_1, agent_2, episodes=EPISODES, rendering=RENDERING, render_every=10)
