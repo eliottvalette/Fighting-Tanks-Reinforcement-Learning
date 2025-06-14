@@ -57,9 +57,11 @@ def run_episode(agent_1 : TanksAgent, agent_2 : NoBrainBot, epsilon, rendering, 
         
         # Get value predictions for visualization
         state_tensor = torch.FloatTensor(state_1).unsqueeze(0)
+        agent_1.model.eval()  # Set model to evaluation mode for inference
         with torch.no_grad():
             _, value = agent_1.model(state_tensor)
             episode_values.append(value.item())
+        agent_1.model.train()  # Set model back to training mode
 
         # Agent 2
         state_2 = env.get_state(num_tank=2)
@@ -138,7 +140,7 @@ if __name__ == "__main__":
         learning_rate=ALPHA,
         entropy_coeff=0.01,  # Decreased for more exploitation
         value_loss_coeff=1.0,  # Increased to prioritize value learning
-        load_model=True,
+        load_model=False,
     )
     # Set agent identity for loading models
     agent_1.is_agent_1 = True

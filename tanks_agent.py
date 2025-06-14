@@ -81,7 +81,7 @@ class TanksAgent:
     def remember(self, state, actions, reward, next_state, done):
         self.memory.append((state, actions, reward, next_state, done))
 
-    def train_model_batch(self, batch_size=16, last_actions = False):
+    def train_model_batch(self, batch_size, last_actions = False):
         if len(self.memory) < batch_size:  # Use provided batch size
             return {"policy_loss": 0, "value_loss": 0, "entropy_loss": 0, "total_loss": 0}
 

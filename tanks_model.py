@@ -13,29 +13,34 @@ class ActorCriticModel(nn.Module):
             nn.Linear(state_size, 52),
             nn.BatchNorm1d(52),
             nn.GELU()
+
         )
 
         # Advantage stream - split into separate heads for each action type
         self.movement_stream = nn.Sequential(
             nn.Linear(52, 128),
+            nn.BatchNorm1d(128),
             nn.GELU(),
             nn.Linear(128, 3)
         )
 
         self.rotate_stream = nn.Sequential(
             nn.Linear(52, 128),
+            nn.BatchNorm1d(128),
             nn.GELU(),
             nn.Linear(128, 3)
         )
 
         self.strafe_stream = nn.Sequential(
             nn.Linear(52, 128),
+            nn.BatchNorm1d(128),
             nn.GELU(),
             nn.Linear(128, 3)
         )
 
         self.fire_stream = nn.Sequential(
             nn.Linear(52, 128),
+            nn.BatchNorm1d(128),
             nn.GELU(),
             nn.Linear(128, 2)
         )
@@ -53,15 +58,6 @@ class ActorCriticModel(nn.Module):
         self.action_sizes = action_sizes
 
     def forward(self, state):
-        # Handle single-sample case (when not training with batches)
-        batch_size = state.size(0)
-        was_single = False
-        
-        if batch_size == 1 and self.training:
-            # Temporarily switch to eval mode for BatchNorm
-            self.eval()
-            was_single = True
-            
         shared_features = self.shared_layers(state)
 
         # Actor: Predict action probabilities for all actions using separate advantage streams
@@ -81,11 +77,7 @@ class ActorCriticModel(nn.Module):
         # Critic: Predict state value with scaling to prevent large values
         state_value = self.value_stream(shared_features) * 0.1  # Increased scaling factor for better value learning
         
-        # Switch back to training mode if we temporarily changed it
-        if was_single:
-            self.train()
-            
-        if rd.random() < 0.001 and not was_single:
+        if rd.random() < 0.001:
             print('________________________')
             print('movement_logits :', movement_logits)
             print('action_probs_movement :', movement_probs)
