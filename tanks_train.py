@@ -123,10 +123,12 @@ def main_training_loop(agent_1, agent_2, episodes, rendering, render_every=10):
         # Learning rate decay
         if episode > 0 and episode % 100 == 0:
             agent_1.adjust_learning_rate(0.95)  # Reduce learning rate by 5% every 100 episodes
+            agent_2.adjust_learning_rate(0.95)  # Reduce learning rate by 5% every 100 episodes
 
         # Save the trained models and generate visualizations every 30 episodes
         if episode % 30 == 29:
             agent_1.save(TANK_1_SAVE_WEIGHTS + f"_epoch_{episode+1}.pth")
+            agent_2.save(TANK_2_SAVE_WEIGHTS + f"_epoch_{episode+1}.pth")
             
             # Generate visualizations every 30 episodes
             visualizer.generate_all_plots()
@@ -153,7 +155,7 @@ if __name__ == "__main__":
         learning_rate=ALPHA,
         entropy_coeff=0.01,  # Decreased for more exploitation
         value_loss_coeff=1.0,  # Increased to prioritize value learning
-        load_model=False,
+        load_model=True,
     )
     # Set agent identity for loading models
     agent_1.is_agent_1 = True
@@ -165,7 +167,7 @@ if __name__ == "__main__":
         learning_rate=ALPHA,
         entropy_coeff=0.01,  # Decreased for more exploitation
         value_loss_coeff=1.0,  # Increased to prioritize value learning
-        load_model=False,
+        load_model=True,
     )
 
     # Start the training loop

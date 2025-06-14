@@ -108,7 +108,7 @@ class TanksAgent:
 
         # Compute TD targets with clipping
         next_value_term = self.gamma * next_state_values * (1 - dones)
-        td_targets = rewards + next_value_term * 0.1
+        td_targets = rewards * 0.5 + next_value_term * 0.5
         advantages = td_targets - state_values.squeeze(-1)
 
         # Policy loss - handle each action type separately

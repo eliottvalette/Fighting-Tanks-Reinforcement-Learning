@@ -414,13 +414,19 @@ class TanksGame:
 
         # Reward for getting better angle/position compared to previous
         if abs(new_angle_to_opponent) < abs(previous_angle_to_opponent):
-            tank.reward += 0.2  # Reward for improving angle
+            tank.reward += 0.1  # Reward for improving angle
 
         # Reward for line of sight and successful firing strategy
         if tank.in_line_of_sight:
             tank.reward += 0.3
             if fire_action == 0 :  # Reward for firing when ready and in sight
                 tank.reward += 0.6
+
+        if tank.looking_block:
+            tank.reward -= 0.5
+        
+        if fire_action == 0 and not tank.check_cooldown(time.time()):
+            tank.reward -= 0.5
 
         # Penalties
         if self.is_head_against_the_wall(laser_distances):
@@ -478,6 +484,8 @@ class TanksGame:
             )
             color = (161, 155, 88) if num_tank == 1 else (41, 79, 23)
             if (laser_angle == 0 and tank.in_line_of_sight) or (laser_angle == 20 and tank.on_close_right) or (laser_angle == 340 and tank.on_close_left):
+                color = (0, 255, 0)
+            if (laser_angle == 0 and tank.looking_block):
                 color = (255, 0, 0)
             pygame.draw.line(self.screen, color, start_pos, end_pos, 2)
     
@@ -705,8 +713,6 @@ if __name__ == "__main__":
             optimal_distance_min = 300  # Pixels
             distance_reward = max(0, 1 - abs(new_distance - optimal_distance_max) / optimal_distance_max)
             tank.reward += distance_reward
-
-            print('new_distance', new_distance)
 
             if new_distance < previous_distance :
                 if new_distance > optimal_distance_max:
