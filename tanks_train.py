@@ -15,10 +15,10 @@ from tanks_paths import TANK_1_WEIGHTS, TANK_2_WEIGHTS, TANK_1_SAVE_WEIGHTS, TAN
 # Hyperparameters
 EPISODES = 5_000  # Increased to ensure convergence
 GAMMA = 0.99    # Standard discount factor
-ALPHA = 0.0001  # Further reduced learning rate for stability
+ALPHA = 0.0003  # Increased learning rate for faster learning
 GLOBAL_N = 11
 MAX_STEPS = 2000  # Round number
-EPS_DECAY = 0.99  # Slower decay for better exploration
+EPS_DECAY = 0.995  # Slower decay for better exploration
 STATE_SIZE = 24 # +1 for Value
 
 def set_seed(seed=42):
@@ -75,8 +75,8 @@ def run_episode(agent_1 : TanksAgent, agent_2 : NoBrainBot, epsilon, rendering, 
             env.render(rendering=True, clock=60, epsilon=epsilon)  # Reduced clock speed for better visualization
 
     # Additional batch training at the end of the episode
-    if len(agent_1.memory) >= 16:
-        losses = agent_1.train_model_batch()
+    if len(agent_1.memory) >= 32:  # Increased batch size for more stable learning
+        losses = agent_1.train_model_batch(batch_size=32)
     else:
         losses = {}
     
@@ -136,9 +136,9 @@ if __name__ == "__main__":
         action_sizes=[3, 3, 3, 2], # [move, rotate, strafe, fire]
         gamma=GAMMA,
         learning_rate=ALPHA,
-        entropy_coeff=0.02,  # Increased for more exploration
-        value_loss_coeff=0.5,
-        load_model=False,
+        entropy_coeff=0.01,  # Decreased for more exploitation
+        value_loss_coeff=1.0,  # Increased to prioritize value learning
+        load_model=True,
     )
     # Set agent identity for loading models
     agent_1.is_agent_1 = True
@@ -149,4 +149,4 @@ if __name__ == "__main__":
     )
 
     # Start the training loop
-    main_training_loop(agent_1, agent_2, episodes=EPISODES, rendering=RENDERING, render_every=10)
+    main_training_loop(agent_1, agent_2, episodes=EPISODES, rendering=RENDERING, render_every=1)

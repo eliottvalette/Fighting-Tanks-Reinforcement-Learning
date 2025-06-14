@@ -76,7 +76,7 @@ class NoBrainBot():
             strafe_action = 2  # Don't strafe
 
         # Fire action: if opponent in sight and we have ammo, fire
-        if in_sight and is_reloaded:
+        if in_sight:
             fire_action = 0  # Fire
         else:
             fire_action = 1  # Don't fire

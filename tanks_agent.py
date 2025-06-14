@@ -79,14 +79,13 @@ class TanksAgent:
         return actions
 
     def remember(self, state, actions, reward, next_state, done):
-        reward *= 0.01
         self.memory.append((state, actions, reward, next_state, done))
 
-    def train_model_batch(self):
-        if len(self.memory) < 16:  # Minimum batch size
+    def train_model_batch(self, batch_size=16):
+        if len(self.memory) < batch_size:  # Use provided batch size
             return {"policy_loss": 0, "value_loss": 0, "entropy_loss": 0, "total_loss": 0}
 
-        batch = random.sample(self.memory, 16)
+        batch = random.sample(self.memory, batch_size)
         states, actions, rewards, next_states, dones = zip(*batch)
 
         states = torch.FloatTensor(states).to(device)
@@ -158,7 +157,7 @@ class TanksAgent:
         # Convert inputs to tensors
         state = torch.FloatTensor(state).unsqueeze(0).to(device)
         next_state = torch.FloatTensor(next_state).unsqueeze(0).to(device)
-        reward = torch.FloatTensor([reward * 0.01]).to(device)
+        reward = torch.FloatTensor([reward]).to(device)  # Increased reward scaling
         done = torch.FloatTensor([done]).to(device)
         actions = torch.tensor([actions]).to(device)
 

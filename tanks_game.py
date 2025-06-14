@@ -9,7 +9,7 @@ from tanks_game_objects import Background, TankPlayer, Bullet, Block
 from tanks_paths import BACKGROUND, TANK_1_IMAGE, TANK_2_IMAGE, BULLET_IMAGE, CRATE_IMAGE, RENDERING
 
 
-DIFFICULTY = 0 # [0, 1]
+DIFFICULTY = 0.08 # [0, 1]
 
 SCREEN_WIDTH = 1000
 SCREEN_HEIGHT = 700
