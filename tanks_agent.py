@@ -106,8 +106,9 @@ class TanksAgent:
             _, next_state_values = self.model(next_states)
             next_state_values = next_state_values.squeeze(-1)
 
-        # Compute TD targets
-        td_targets = rewards + self.gamma * next_state_values * (1 - dones)
+        # Compute TD targets with clipping
+        next_value_term = self.gamma * next_state_values * (1 - dones)
+        td_targets = rewards + next_value_term * 0.1
         advantages = td_targets - state_values.squeeze(-1)
 
         # Policy loss - handle each action type separately
@@ -134,8 +135,14 @@ class TanksAgent:
             
             offset += size
 
-        # Value loss
-        value_loss = torch.mean((state_values.squeeze(-1) - td_targets.detach()) ** 2)
+        # Value loss with clipping to prevent explosion
+        td_error = state_values.squeeze(-1) - td_targets.detach()
+        # Use Huber loss (smoother L1) instead of MSE to be less sensitive to outliers
+        value_loss = torch.mean(torch.where(
+            torch.abs(td_error) < 10.0,
+            0.5 * td_error ** 2,
+            10.0 * (torch.abs(td_error) - 5.0)
+        ))
 
         # Total loss
         total_loss = policy_loss + self.value_loss_coeff * value_loss - self.entropy_coeff * entropy_loss

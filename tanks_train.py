@@ -33,7 +33,7 @@ def set_seed(seed=42):
     torch.backends.cudnn.benchmark = False
 
 # Function to run a single episode
-def run_episode(agent_1 : TanksAgent, agent_2 : NoBrainBot, epsilon, rendering, episode, render_every, visualizer=None):
+def run_episode(agent_1 : TanksAgent, agent_2 : TanksAgent, epsilon, rendering, episode, render_every, visualizer=None):
     env = TanksGame(max_steps=MAX_STEPS)
     env.reset()
     done = False
@@ -65,19 +65,34 @@ def run_episode(agent_1 : TanksAgent, agent_2 : NoBrainBot, epsilon, rendering, 
 
         # Agent 2
         state_2 = env.get_state(num_tank=2)
-        actions_2 = agent_2.get_action(state_2)
-        _, _, done, _ = env.step(actions_2, num_tank=2)
+        actions_2 = agent_2.get_action(state_2, epsilon=epsilon, action_sizes=agent_2.action_sizes)
+        next_state_2, reward_2, done, _ = env.step(actions_2, num_tank=2)
+        agent_2.remember(state_2, actions_2, reward_2, next_state_2, done)
+
+        # Collect actions for visualization
+        episode_actions.append(actions_2)
+        
+        # Get value predictions for visualization
+        state_tensor = torch.FloatTensor(state_2).unsqueeze(0)
+        agent_2.model.eval()  # Set model to evaluation mode for inference
+        with torch.no_grad():
+            _, value = agent_2.model(state_tensor)
+            episode_values.append(value.item())
+        agent_2.model.train()  # Set model back to training mode
 
         total_reward_1 += reward_1
+        total_reward_2 += reward_2
 
         # Train the agent with online single-step updates
         loss = agent_1.train_model_batch(batch_size=16, last_actions = True)
+        loss_2 = agent_2.train_model_batch(batch_size=16, last_actions = True)
 
         if rendering and (episode % render_every == 0):
             env.render(rendering=True, clock=60, epsilon=epsilon)  # Reduced clock speed for better visualization
 
     # Additional batch training at the end of the episode
     losses = agent_1.train_model_batch(batch_size=64, last_actions = False)
+    losses_2 = agent_2.train_model_batch(batch_size=64, last_actions = False)
 
     
     # Record metrics if visualizer is provided
@@ -143,10 +158,15 @@ if __name__ == "__main__":
     # Set agent identity for loading models
     agent_1.is_agent_1 = True
 
-    agent_2 = NoBrainBot(
+    agent_2 = TanksAgent(
         state_size=STATE_SIZE,
-        action_sizes=[3, 3, 3, 2]
+        action_sizes=[3, 3, 3, 2], # [move, rotate, strafe, fire]
+        gamma=GAMMA,
+        learning_rate=ALPHA,
+        entropy_coeff=0.01,  # Decreased for more exploitation
+        value_loss_coeff=1.0,  # Increased to prioritize value learning
+        load_model=False,
     )
 
     # Start the training loop
-    main_training_loop(agent_1, agent_2, episodes=EPISODES, rendering=RENDERING, render_every=1)
+    main_training_loop(agent_1, agent_2, episodes=EPISODES, rendering=RENDERING, render_every=4)

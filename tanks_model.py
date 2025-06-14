@@ -74,8 +74,10 @@ class ActorCriticModel(nn.Module):
 
         action_probs = torch.cat([movement_probs, rotate_probs, strafe_probs, fire_probs], dim=1)
         
-        # Critic: Predict state value with scaling to prevent large values
-        state_value = self.value_stream(shared_features) * 0.1  # Increased scaling factor for better value learning
+        # Critic: Predict state value with centering and mild scaling
+        raw_value = self.value_stream(shared_features)
+        # Initial bias toward zero (neither win nor loss)
+        state_value = torch.tanh(raw_value) * 10.0
         
         if rd.random() < 0.001:
             print('________________________')
