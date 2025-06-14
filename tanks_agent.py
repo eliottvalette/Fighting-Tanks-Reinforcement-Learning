@@ -81,11 +81,14 @@ class TanksAgent:
     def remember(self, state, actions, reward, next_state, done):
         self.memory.append((state, actions, reward, next_state, done))
 
-    def train_model_batch(self, batch_size=16):
+    def train_model_batch(self, batch_size=16, last_actions = False):
         if len(self.memory) < batch_size:  # Use provided batch size
             return {"policy_loss": 0, "value_loss": 0, "entropy_loss": 0, "total_loss": 0}
 
-        batch = random.sample(self.memory, batch_size)
+        if last_actions:
+            batch = random.sample(self.memory, batch_size)
+        else:
+            batch = self.memory[-batch_size:]
         states, actions, rewards, next_states, dones = zip(*batch)
 
         states = torch.FloatTensor(states).to(device)
@@ -132,73 +135,6 @@ class TanksAgent:
 
         # Value loss
         value_loss = torch.mean((state_values.squeeze(-1) - td_targets.detach()) ** 2)
-
-        # Total loss
-        total_loss = policy_loss + self.value_loss_coeff * value_loss - self.entropy_coeff * entropy_loss
-
-        # Backpropagation
-        self.optimizer.zero_grad()
-        total_loss.backward()
-        nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
-        self.optimizer.step()
-        
-        # Return loss values for visualization
-        return {
-            "policy_loss": policy_loss.item(),
-            "value_loss": value_loss.item(),
-            "entropy_loss": entropy_loss.item(),
-            "total_loss": total_loss.item()
-        }
-
-    def train_model_single(self, state, actions, reward, next_state, done):
-        '''
-        Same as train_model_batch, but for a single experience.
-        '''
-        # Convert inputs to tensors
-        state = torch.FloatTensor(state).unsqueeze(0).to(device)
-        next_state = torch.FloatTensor(next_state).unsqueeze(0).to(device)
-        reward = torch.FloatTensor([reward]).to(device)  # Increased reward scaling
-        done = torch.FloatTensor([done]).to(device)
-        actions = torch.tensor([actions]).to(device)
-
-        # Get current policy and value predictions
-        action_probs, state_values = self.model(state)
-
-        # Compute next state values
-        with torch.no_grad():
-            _, next_state_values = self.model(next_state)
-            next_state_values = next_state_values.squeeze(-1)
-
-        # Compute TD target and advantage
-        td_target = reward + self.gamma * next_state_values * (1 - done)
-        advantage = td_target - state_values.squeeze(-1)
-
-        # Policy loss - handle each action type separately
-        policy_loss = 0
-        entropy_loss = 0
-        offset = 0
-        
-        for i, size in enumerate(self.action_sizes):
-            # Extract probabilities for this action type
-            probs = action_probs[:, offset:offset+size]
-            
-            # Get the action taken for this type
-            action_i = actions[:, i]
-            
-            # Calculate log probability of chosen action
-            log_prob = torch.log(torch.gather(probs, 1, action_i.unsqueeze(1)) + 1e-10)
-            
-            # Policy gradient loss: -log(π(a|s)) * advantage
-            policy_loss -= log_prob.squeeze() * advantage.detach()
-            
-            # Entropy loss for exploration: -Σ π(a|s) * log(π(a|s))
-            entropy_i = -torch.mean(torch.sum(probs * torch.log(probs + 1e-10), dim=1))
-            entropy_loss += entropy_i
-            
-            offset += size
-
-        # Value loss
-        value_loss = (state_values.squeeze(-1) - td_target.detach()) ** 2
 
         # Total loss
         total_loss = policy_loss + self.value_loss_coeff * value_loss - self.entropy_coeff * entropy_loss

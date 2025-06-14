@@ -10,59 +10,47 @@ class ActorCriticModel(nn.Module):
 
         # Enhanced shared layers with dropout for regularization
         self.shared_layers = nn.Sequential(
-            nn.Linear(state_size, 256),
-            nn.BatchNorm1d(256),
-            nn.GELU(),
-            nn.Linear(256, 256),
-            nn.BatchNorm1d(256),
-            nn.GELU(),
+            nn.Linear(state_size, 52),
+            nn.BatchNorm1d(52),
+            nn.GELU()
         )
 
         # Advantage stream - split into separate heads for each action type
         self.movement_stream = nn.Sequential(
-            nn.Linear(256, 128),
+            nn.Linear(52, 128),
             nn.GELU(),
             nn.Linear(128, 3)
         )
 
         self.rotate_stream = nn.Sequential(
-            nn.Linear(256, 128),
+            nn.Linear(52, 128),
             nn.GELU(),
             nn.Linear(128, 3)
         )
 
         self.strafe_stream = nn.Sequential(
-            nn.Linear(256, 128),
+            nn.Linear(52, 128),
             nn.GELU(),
             nn.Linear(128, 3)
         )
 
         self.fire_stream = nn.Sequential(
-            nn.Linear(256, 128),
+            nn.Linear(52, 128),
             nn.GELU(),
             nn.Linear(128, 2)
         )
 
         # Value stream with deeper architecture
         self.value_stream = nn.Sequential(
-            nn.Linear(256, 128),
+            nn.Linear(52, 128),
             nn.BatchNorm1d(128),
-            nn.ReLU(),
+            nn.GELU(),
             nn.Dropout(0.1),
             nn.Linear(128, 1)
         )
 
         # Action sizes to split the actor output
         self.action_sizes = action_sizes
-
-        # Initialize weights with improved method
-        self.apply(self._init_weights)
-
-    def _init_weights(self, module):
-        if isinstance(module, nn.Linear):
-            nn.init.xavier_uniform_(module.weight, gain=0.05)  # Increased gain for better gradient flow
-            if module.bias is not None:
-                nn.init.constant_(module.bias, 0)
 
     def forward(self, state):
         # Handle single-sample case (when not training with batches)

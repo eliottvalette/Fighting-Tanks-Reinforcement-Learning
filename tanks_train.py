@@ -69,14 +69,14 @@ def run_episode(agent_1 : TanksAgent, agent_2 : NoBrainBot, epsilon, rendering, 
         total_reward_1 += reward_1
 
         # Train the agent with online single-step updates
-        loss = agent_1.train_model_single(state_1, actions_1, reward_1, next_state_1, done)
+        loss = agent_1.train_model_batch(batch_size=16, last_actions = True)
 
         if rendering and (episode % render_every == 0):
             env.render(rendering=True, clock=60, epsilon=epsilon)  # Reduced clock speed for better visualization
 
     # Additional batch training at the end of the episode
     if len(agent_1.memory) >= 32:  # Increased batch size for more stable learning
-        losses = agent_1.train_model_batch(batch_size=32)
+        losses = agent_1.train_model_batch(batch_size=32, last_actions = False)
     else:
         losses = {}
     
