@@ -79,15 +79,15 @@ class ActorCriticModel(nn.Module):
         
         if rd.random() < 0.001:
             print('________________________')
-            print('movement_logits :', movement_logits)
-            print('action_probs_movement :', movement_probs)
-            print('rotate_logits :', rotate_logits)
-            print('action_probs_rotate :', rotate_probs)
-            print('strafe_logits :', strafe_logits)
-            print('action_probs_strafe :', strafe_probs)
-            print('fire_logits :', fire_logits)
-            print('action_probs_fire :', fire_probs)
-            print('state_value :', state_value)
+            print(f'movement_logits, mean : {movement_logits.mean()}, max : {movement_logits.max()}, min : {movement_logits.min()}')
+            print(f'action_probs_movement : {movement_probs.mean()}, max : {movement_probs.max()}, min : {movement_probs.min()}')
+            print(f'rotate_logits, mean : {rotate_logits.mean()}, max : {rotate_logits.max()}, min : {rotate_logits.min()}')
+            print(f'action_probs_rotate : {rotate_probs.mean()}, max : {rotate_probs.max()}, min : {rotate_probs.min()}')
+            print(f'strafe_logits, mean : {strafe_logits.mean()}, max : {strafe_logits.max()}, min : {strafe_logits.min()}')
+            print(f'action_probs_strafe : {strafe_probs.mean()}, max : {strafe_probs.max()}, min : {strafe_probs.min()}')
+            print(f'fire_logits, mean : {fire_logits.mean()}, max : {fire_logits.max()}, min : {fire_logits.min()}')
+            print(f'action_probs_fire : {fire_probs.mean()}, max : {fire_probs.max()}, min : {fire_probs.min()}')
+            print(f'state_value, mean : {state_value.mean()}, max : {state_value.max()}, min : {state_value.min()}')
             print('________________________')
 
         return action_probs, state_value

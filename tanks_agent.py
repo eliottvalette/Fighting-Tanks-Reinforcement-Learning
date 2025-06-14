@@ -88,7 +88,8 @@ class TanksAgent:
         if last_actions:
             batch = random.sample(self.memory, batch_size)
         else:
-            batch = self.memory[-batch_size:]
+            # Convert to list first since deque doesn't support slicing
+            batch = list(self.memory)[-batch_size:]
         states, actions, rewards, next_states, dones = zip(*batch)
 
         states = torch.FloatTensor(states).to(device)

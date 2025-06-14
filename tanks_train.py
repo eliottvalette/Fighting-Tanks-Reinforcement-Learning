@@ -77,10 +77,8 @@ def run_episode(agent_1 : TanksAgent, agent_2 : NoBrainBot, epsilon, rendering, 
             env.render(rendering=True, clock=60, epsilon=epsilon)  # Reduced clock speed for better visualization
 
     # Additional batch training at the end of the episode
-    if len(agent_1.memory) >= 32:  # Increased batch size for more stable learning
-        losses = agent_1.train_model_batch(batch_size=32, last_actions = False)
-    else:
-        losses = {}
+    losses = agent_1.train_model_batch(batch_size=64, last_actions = False)
+
     
     # Record metrics if visualizer is provided
     if visualizer:
