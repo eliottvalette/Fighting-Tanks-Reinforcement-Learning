@@ -34,7 +34,7 @@ class TrainingVisualizer:
         self.backup_actions_file = os.path.join(save_dir_data, "actions_backup.pkl")
         self.backup_values_file = os.path.join(save_dir_data, "values_backup.pkl")
         
-    def record_episode(self, episode, reward, steps, epsilon, losses=None):
+    def record_episode(self, episode, reward, steps, epsilon, losses):
         """Record metrics for a completed episode."""
         self.rewards_history.append(reward)
         self.episode_lengths.append(steps)

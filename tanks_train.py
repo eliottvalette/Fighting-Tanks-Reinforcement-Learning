@@ -19,7 +19,7 @@ ALPHA = 0.0003  # Increased learning rate for faster learning
 GLOBAL_N = 11
 MAX_STEPS = 2000  # Round number
 EPS_DECAY = 0.99  # Slower decay for better exploration
-STATE_SIZE = 24 # +1 for Value
+STATE_SIZE = 30 + 1 # +1 for Value
 
 def set_seed(seed=42):
     rd.seed(seed)
@@ -33,7 +33,7 @@ def set_seed(seed=42):
     torch.backends.cudnn.benchmark = False
 
 # Function to run a single episode
-def run_episode(agent_1 : TanksAgent, agent_2 : TanksAgent, epsilon, rendering, episode, render_every, visualizer=None):
+def run_episode(agent_1 : TanksAgent, agent_2 : TanksAgent, epsilon, rendering, episode, render_every, visualizer : TrainingVisualizer):
     env = TanksGame(max_steps=MAX_STEPS)
     env.reset()
     done = False

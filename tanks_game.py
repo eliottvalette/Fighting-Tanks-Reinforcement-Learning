@@ -350,6 +350,18 @@ class TanksGame:
             [head_on_wall],                                                           # (1)
             [looking_block],
         ])
+
+        # ----- TOKENIZATION -----
+        token_x_position = 0 if state[0] < 0 else 1
+        token_y_position = 0 if state[1] < 0 else 1
+        token_direction = 0 if state[2] < 0 else 1
+        token_relative_position_x = 0 if state[4] < 0 else 1
+        token_relative_position_y = 0 if state[5] < 0 else 1
+        token_opponent_direction = 0 if state[6] < 0 else 1
+        token_relative_angle = 0 if state[8] < 0 else 1
+
+        state = np.concatenate([state, [token_x_position, token_y_position, token_direction, token_relative_position_x, token_relative_position_y, token_opponent_direction, token_relative_angle]])
+
         return state
 
 
@@ -665,13 +677,13 @@ if __name__ == "__main__":
             print(f"Distance to Opponent: {state_1[9]}")
             print(f"Distance to Block: {state_1[10]}")
             print(f"Ammo: {state_1[11]}")
-            print(f"Laser Distances: {state_1[12:17]}")
-            print(f"Close Left: {state_1[17]}")
-            print(f"In Line of Sight: {state_1[18]}")
-            print(f"Close Right: {state_1[19]}")
-            print(f"Is Reloaded: {state_1[20]}")
-            print(f"Head on Wall: {state_1[21]}")
-            print(f"Looking Block: {state_1[22]}")
+            print(f"Laser Distances: {state_1[12:18]}")
+            print(f"Close Left: {state_1[18]}")
+            print(f"In Line of Sight: {state_1[19]}")
+            print(f"Close Right: {state_1[20]}")
+            print(f"Is Reloaded: {state_1[21]}")
+            print(f"Head on Wall: {state_1[22]}")
+            print(f"Looking Block: {state_1[23]}")
 
 
             print("\n--- Tank 2 State ---")
@@ -685,13 +697,13 @@ if __name__ == "__main__":
             print(f"Distance to Opponent: {state_2[9]}")
             print(f"Distance to Block: {state_2[10]}")
             print(f"Ammo: {state_2[11]}")
-            print(f"Laser Distances: {state_2[12:17]}")
-            print(f"Close Left: {state_2[17]}")
-            print(f"In Line of Sight: {state_2[18]}")
-            print(f"Close Right: {state_2[19]}")
-            print(f"Is Reloaded: {state_2[20]}")
-            print(f"Head on Wall: {state_2[21]}")
-            print(f"Looking Block: {state_2[22]}")
+            print(f"Laser Distances: {state_2[12:18]}")
+            print(f"Close Left: {state_2[18]}")
+            print(f"In Line of Sight: {state_2[19]}")
+            print(f"Close Right: {state_2[20]}")
+            print(f"Is Reloaded: {state_2[21]}")
+            print(f"Head on Wall: {state_2[22]}")
+            print(f"Looking Block: {state_2[23]}")
 
             time.sleep(0.1)
 
