@@ -71,9 +71,9 @@ class TrainingVisualizer:
         with open(self.metrics_file, 'w') as f:
             json.dump(metrics, f)
             
-        # Every 30 episodes, also create a backup (overwriting previous backup)
+        # Every 10 episodes, also create a backup (overwriting previous backup)
         current_episode = len(self.rewards_history)
-        if current_episode % 30 == 0:
+        if current_episode % 10 == 0:
             # Save metrics backup (overwriting previous backup)
             with open(self.backup_metrics_file, 'w') as f:
                 json.dump(metrics, f)
@@ -138,7 +138,7 @@ class TrainingVisualizer:
         plt.title('Training Loss Components')
         plt.grid(True, alpha=0.3)
         plt.legend()
-        plt.yscale('log')  # Log scale often helps visualize loss curves
+        plt.yscale('symlog', linthresh=0.01)  # Symmetric log scale with linear region near zero
         
         # Save the figure
         plt.savefig(os.path.join(self.save_dir_png, 'loss_curves.png'), dpi=300, bbox_inches='tight')

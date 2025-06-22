@@ -106,10 +106,16 @@ class TanksAgent:
             _, next_state_values = self.model(next_states)
             next_state_values = next_state_values.squeeze(-1)
 
-        # Compute TD targets with clipping
+        # Compute TD targets with clipping to prevent saturation
         next_value_term = self.gamma * next_state_values * (1 - dones)
-        td_targets = rewards * 0.5 + next_value_term * 0.5
+        td_targets = rewards + next_value_term
         advantages = td_targets - state_values.squeeze(-1)
+
+        if random.random() < 0.001:
+            print(f'state_values, mean : {state_values.mean()}, max : {state_values.max()}, min : {state_values.min()}')
+            print(f'rewards, mean : {rewards.mean()}, max : {rewards.max()}, min : {rewards.min()}')
+            print(f'next_state_values, mean : {next_state_values.mean()}, max : {next_state_values.max()}, min : {next_state_values.min()}')
+            print(f'advantages, mean : {advantages.mean()}, max : {advantages.max()}, min : {advantages.min()}')
 
         # Policy loss - handle each action type separately
         policy_loss = 0
@@ -136,13 +142,11 @@ class TanksAgent:
             offset += size
 
         # Value loss with clipping to prevent explosion
-        td_error = state_values.squeeze(-1) - td_targets.detach()
-        # Use Huber loss (smoother L1) instead of MSE to be less sensitive to outliers
-        value_loss = torch.mean(torch.where(
-            torch.abs(td_error) < 10.0,
-            0.5 * td_error ** 2,
-            10.0 * (torch.abs(td_error) - 5.0)
-        ))
+        td_error = td_targets.detach() - state_values.squeeze(-1)
+        if random.random() < 0.001:
+            print(f'td_error, mean : {td_error.mean()}, max : {td_error.max()}, min : {td_error.min()}')
+        # Use Smooth L1 Loss instead of MSE to be less sensitive to outliers
+        value_loss = nn.SmoothL1Loss()(state_values.squeeze(-1), td_targets.detach())
 
         # Total loss
         total_loss = policy_loss + self.value_loss_coeff * value_loss - self.entropy_coeff * entropy_loss

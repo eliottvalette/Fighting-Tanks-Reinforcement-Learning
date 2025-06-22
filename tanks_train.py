@@ -18,7 +18,7 @@ GAMMA = 0.99    # Standard discount factor
 ALPHA = 0.0003  # Increased learning rate for faster learning
 GLOBAL_N = 11
 MAX_STEPS = 2000  # Round number
-EPS_DECAY = 0.995  # Slower decay for better exploration
+EPS_DECAY = 0.99  # Slower decay for better exploration
 STATE_SIZE = 24 # +1 for Value
 
 def set_seed(seed=42):
@@ -93,7 +93,6 @@ def run_episode(agent_1 : TanksAgent, agent_2 : TanksAgent, epsilon, rendering, 
     # Additional batch training at the end of the episode
     losses = agent_1.train_model_batch(batch_size=64, last_actions = False)
     losses_2 = agent_2.train_model_batch(batch_size=64, last_actions = False)
-
     
     # Record metrics if visualizer is provided
     if visualizer:
@@ -155,7 +154,7 @@ if __name__ == "__main__":
         learning_rate=ALPHA,
         entropy_coeff=0.01,  # Decreased for more exploitation
         value_loss_coeff=1.0,  # Increased to prioritize value learning
-        load_model=True,
+        load_model=False,
     )
     # Set agent identity for loading models
     agent_1.is_agent_1 = True
@@ -167,8 +166,8 @@ if __name__ == "__main__":
         learning_rate=ALPHA,
         entropy_coeff=0.01,  # Decreased for more exploitation
         value_loss_coeff=1.0,  # Increased to prioritize value learning
-        load_model=True,
+        load_model=False,
     )
 
     # Start the training loop
-    main_training_loop(agent_1, agent_2, episodes=EPISODES, rendering=RENDERING, render_every=4)
+    main_training_loop(agent_1, agent_2, episodes=EPISODES, rendering=RENDERING, render_every=1)

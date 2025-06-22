@@ -13,7 +13,6 @@ class ActorCriticModel(nn.Module):
             nn.Linear(state_size, 52),
             nn.BatchNorm1d(52),
             nn.GELU()
-
         )
 
         # Advantage stream - split into separate heads for each action type
@@ -75,9 +74,7 @@ class ActorCriticModel(nn.Module):
         action_probs = torch.cat([movement_probs, rotate_probs, strafe_probs, fire_probs], dim=1)
         
         # Critic: Predict state value with centering and mild scaling
-        raw_value = self.value_stream(shared_features)
-        # Initial bias toward zero (neither win nor loss)
-        state_value = torch.tanh(raw_value) * 10.0
+        state_value = self.value_stream(shared_features)
         
         if rd.random() < 0.001:
             print('________________________')

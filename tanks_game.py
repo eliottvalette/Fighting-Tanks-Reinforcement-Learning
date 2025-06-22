@@ -51,6 +51,8 @@ class TanksGame:
 
         self.current_step = 0
         self.max_steps = max_steps
+        self.tank_1_block_looking_steps = 0
+        self.tank_2_block_looking_steps = 0
 
 
     def reset(self):
@@ -65,6 +67,8 @@ class TanksGame:
         self.tank_2.cached_rad_angle = np.radians(self.tank_2.direction)
 
         self.current_step = 0
+        self.tank_1_block_looking_steps = 0
+        self.tank_2_block_looking_steps = 0
 
 
         
@@ -421,7 +425,7 @@ class TanksGame:
             tank.reward += 0.3
             if fire_action == 0 :  # Reward for firing when ready and in sight
                 tank.reward += 0.6
-
+        
         if tank.looking_block:
             tank.reward -= 0.5
         
@@ -456,6 +460,9 @@ class TanksGame:
             done = True
         else:
             done = False
+        
+        # Normalize reward
+        tank.reward *= 0.1
 
         self.current_step += 1
         tank.total_reward += tank.reward
