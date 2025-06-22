@@ -20,6 +20,9 @@ GLOBAL_N = 11
 MAX_STEPS = 2000  # Round number
 EPS_DECAY = 0.99  # Slower decay for better exploration
 STATE_SIZE = 30 + 1 # +1 for Value
+SHORT_MEMORY_SIZE = MAX_STEPS
+LONG_MEMORY_SIZE = 10000
+LONG_MEMORY_UPDATE_FREQUENCY = 100
 
 def set_seed(seed=42):
     rd.seed(seed)
@@ -43,6 +46,7 @@ def run_episode(agent_1 : TanksAgent, agent_2 : TanksAgent, epsilon, rendering, 
     episode_actions = []
     episode_values = []
     step_count = 0
+    long_memory_episode_delay = rd.randint(0, LONG_MEMORY_UPDATE_FREQUENCY) # So that it's not always the same episode (+ periodic update) that is saved
 
     while not done and step_count < MAX_STEPS:
         step_count += 1
@@ -50,7 +54,9 @@ def run_episode(agent_1 : TanksAgent, agent_2 : TanksAgent, epsilon, rendering, 
         state_1 = env.get_state(num_tank=1)
         actions_1 = agent_1.get_action(state=state_1, epsilon=epsilon, action_sizes=agent_1.action_sizes)
         next_state_1, reward_1, done, _ = env.step(actions_1, num_tank=1)
-        agent_1.remember(state_1, actions_1, reward_1, next_state_1, done)
+        agent_1.remember_short(state_1, actions_1, reward_1, next_state_1, done)
+        if step_count + long_memory_episode_delay % LONG_MEMORY_UPDATE_FREQUENCY == 0:
+            agent_1.remember_long(state_1, actions_1, reward_1, next_state_1, done)
 
         # Collect actions for visualization
         episode_actions.append(actions_1)
@@ -67,7 +73,9 @@ def run_episode(agent_1 : TanksAgent, agent_2 : TanksAgent, epsilon, rendering, 
         state_2 = env.get_state(num_tank=2)
         actions_2 = agent_2.get_action(state_2, epsilon=epsilon, action_sizes=agent_2.action_sizes)
         next_state_2, reward_2, done, _ = env.step(actions_2, num_tank=2)
-        agent_2.remember(state_2, actions_2, reward_2, next_state_2, done)
+        agent_2.remember_short(state_2, actions_2, reward_2, next_state_2, done)
+        if step_count + long_memory_episode_delay % LONG_MEMORY_UPDATE_FREQUENCY == 0:
+            agent_2.remember_long(state_2, actions_2, reward_2, next_state_2, done)
 
         # Collect actions for visualization
         episode_actions.append(actions_2)
@@ -84,15 +92,15 @@ def run_episode(agent_1 : TanksAgent, agent_2 : TanksAgent, epsilon, rendering, 
         total_reward_2 += reward_2
 
         # Train the agent with online single-step updates
-        loss = agent_1.train_model_batch(batch_size=16, last_actions = True)
-        loss_2 = agent_2.train_model_batch(batch_size=16, last_actions = True)
+        loss = agent_1.train_model_batch(batch_size=16, short_memory = True)
+        loss_2 = agent_2.train_model_batch(batch_size=16, short_memory = True)
 
         if rendering and (episode % render_every == 0):
             env.render(rendering=True, clock=60, epsilon=epsilon)  # Reduced clock speed for better visualization
 
     # Additional batch training at the end of the episode
-    losses = agent_1.train_model_batch(batch_size=64, last_actions = False)
-    losses_2 = agent_2.train_model_batch(batch_size=64, last_actions = False)
+    losses = agent_1.train_model_batch(batch_size=64, short_memory = False)
+    losses_2 = agent_2.train_model_batch(batch_size=64, short_memory = False)
     
     # Record metrics if visualizer is provided
     if visualizer:
@@ -155,6 +163,8 @@ if __name__ == "__main__":
         entropy_coeff=0.01,  # Decreased for more exploitation
         value_loss_coeff=1.0,  # Increased to prioritize value learning
         load_model=False,
+        short_memory_size=SHORT_MEMORY_SIZE,
+        long_memory_size=LONG_MEMORY_SIZE,
     )
     # Set agent identity for loading models
     agent_1.is_agent_1 = True
@@ -167,6 +177,8 @@ if __name__ == "__main__":
         entropy_coeff=0.01,  # Decreased for more exploitation
         value_loss_coeff=1.0,  # Increased to prioritize value learning
         load_model=False,
+        short_memory_size=SHORT_MEMORY_SIZE,
+        long_memory_size=LONG_MEMORY_SIZE,
     )
 
     # Start the training loop

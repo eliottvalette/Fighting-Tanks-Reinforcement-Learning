@@ -11,7 +11,7 @@ device = torch.device("mps") if torch.backends.mps.is_available() else torch.dev
 device = 'cpu'  # Uncomment to force CPU
 
 class TanksAgent:
-    def __init__(self, state_size, action_sizes, gamma, learning_rate, entropy_coeff=0.01, value_loss_coeff=0.5, load_model=False):
+    def __init__(self, state_size, action_sizes, gamma, learning_rate, short_memory_size, long_memory_size, entropy_coeff=0.01, value_loss_coeff=0.5, load_model=False):
         self.state_size = state_size
         self.action_sizes = action_sizes
         self.gamma = gamma
@@ -22,7 +22,8 @@ class TanksAgent:
 
         self.model = ActorCriticModel(state_size, action_sizes).to(device)
         self.optimizer = optim.Adam(self.model.parameters(), lr=self.learning_rate)
-        self.memory = deque(maxlen=10000)  # Experience replay buffer
+        self.short_memory = deque(maxlen=short_memory_size)
+        self.long_memory = deque(maxlen=long_memory_size)
 
         self.load_model = load_model
         if self.load_model:
@@ -78,18 +79,23 @@ class TanksAgent:
             
         return actions
 
-    def remember(self, state, actions, reward, next_state, done):
-        self.memory.append((state, actions, reward, next_state, done))
+    def remember_short(self, state, actions, reward, next_state, done):
+        self.short_memory.append((state, actions, reward, next_state, done))
+    
+    def remember_long(self, state, actions, reward, next_state, done):
+        self.long_memory.append((state, actions, reward, next_state, done))
 
-    def train_model_batch(self, batch_size, last_actions = False):
-        if len(self.memory) < batch_size:  # Use provided batch size
+    def train_model_batch(self, batch_size, short_memory = False):
+
+        if short_memory:
+            memory = self.short_memory
+        else:
+            memory = self.long_memory
+
+        if len(memory) < batch_size:  # Use provided batch size
             return {"policy_loss": 0, "value_loss": 0, "entropy_loss": 0, "total_loss": 0}
 
-        if last_actions:
-            batch = random.sample(self.memory, batch_size)
-        else:
-            # Convert to list first since deque doesn't support slicing
-            batch = list(self.memory)[-batch_size:]
+        batch = random.sample(memory, batch_size)
         states, actions, rewards, next_states, dones = zip(*batch)
 
         states = torch.FloatTensor(states).to(device)
