@@ -122,7 +122,7 @@ class CriticModel(nn.Module):
         
         """
         h = self.shared(state)
-        V = self.V_head(h)                          
+        V = self.V_head(h)      
         A = self.A_head(h)                          
         Q = V + A - A.mean(dim=1, keepdim=True)    
         return Q, V.squeeze(-1)                   

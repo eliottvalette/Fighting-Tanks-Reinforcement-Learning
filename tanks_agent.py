@@ -11,6 +11,25 @@ device = torch.device("mps") if torch.backends.mps.is_available() else torch.dev
 device = 'cpu'  # Uncomment to force CPU
 
 class TanksAgent:
+    """
+    High-level wrapper that couples an **Actor** (policy π_θ) and a **Dueling Critic**
+    (Q_ϕ & V_ϕ) to control one tank.
+    Key features
+    ------------
+    • *Composite actions* – the environment expects four independent categorical
+      decisions: move (3), rotate (3), strafe (3), fire (2) ⇒ 11 discrete choices.  
+    • *Two replay buffers*  
+        short_memory : on-policy, 1-episode window (A2C style)  
+        long_memory  : off-policy, large FIFO (DQN style)  
+    • *Training loop*  
+        1. Actor produces π_θ(a | s) and selects actions (ε-greedy).  
+        2. Critic outputs Q(s,·) and V(s) → TD-target  
+           *td* = r + γ maxₐ′ Q(s′, a′).  
+        3. Losses  
+           – **Actor** : −log π_θ · Advantage  (A = Q−V)  − β H[π]  
+           – **Critic**: MSE(Q(s,a), td)  
+        4. Two independent Adam optimisers update θ and ϕ.
+    """
     def __init__(self, state_size, action_sizes, gamma, learning_rate, short_memory_size, long_memory_size, entropy_coeff=0.01, policy_loss_coeff=1.0, load_model=False):
         self.state_size = state_size
         self.action_sizes = action_sizes
@@ -97,8 +116,25 @@ class TanksAgent:
     def remember_long(self, state, actions, reward, next_state, done):
         self.long_memory.append((state, actions, reward, next_state, done))
 
-    def train_model_batch(self, batch_size, short_memory = False):
+    def train_model_batch(self, batch_size, short_memory = True):
+        """
+         One optimisation step on a mini-batch.
 
+        Workflow
+        --------
+            1.  Sample `batch_size` transitions from the chosen replay buffer
+                (short = on-policy, long = off-policy).  
+            2.  Compute
+                    π_θ(a|s)                         # Actor network
+                    Q_ϕ(s, ·), V_ϕ(s)                # Critic network  
+                    Q_ϕ(s′, ·)                       # Critic network target for TD  
+                    td_target = r + γ·maxₐ′ Q(s′, a′)  
+                    advantage = Q(s,a) − V(s)  
+            3.  Losses  
+                    critic_loss = MSE(Q(s,a), td_target)  
+                    actor_loss  = −E[log π(a|s) · advantage] − β entropy  
+            4.  Back-propagate and update the two optimisers.
+        """
         if short_memory:
             memory = self.short_memory
         else:
@@ -118,26 +154,26 @@ class TanksAgent:
 
         # Get current policy and value predictions
         action_probs = self.actor(states)
-        q_values, state_values = self.critic(states)       # Q(s,*), V(s)
+        q_values, state_values = self.critic(states)       # Q(s,*), V(s) => (batch_size, 11), (batch_size, 1)
 
         # Compute next state values
         with torch.no_grad():
             q_next, _ = self.critic(next_states)           # Q(s',*)
-            next_state_values = q_next.max(dim=1).values   # max_a' Q(s',a')
+            next_state_values = q_next.max(dim=1).values   # max_a' Q(s',a') => (batch_size, 1)
 
         # Select Q(s,a) played (average over all action heads)
-        chosen_q = []
+        list_of_chosen_q = []
         offset = 0
-        for i, size in enumerate(self.action_sizes):
-            a_i = actions_tensor[:, i]                     # (B,)
-            q_i  = q_values[:, offset:offset+size]         # (B,size)
-            chosen_q.append( q_i.gather(1, a_i.unsqueeze(1)) )
-            offset += size
-        chosen_q = torch.cat(chosen_q, dim=1).mean(dim=1)  # (B,)  moyenne des 4 têtes
+        for head_idx, head_width in enumerate(self.action_sizes): # iterate over all 4 heads
+            chosen_action = actions_tensor[:, head_idx]                     # (batch_size, 1) (if in first head, and action is no move, chosen_action is 2)
+            q_head_slice  = q_values[:, offset:offset+head_width]           # (batch_size, head_width) q values of actions in head i
+            list_of_chosen_q.append(q_head_slice.gather(1, chosen_action.unsqueeze(1)) ) # (batch_size, 1) get the list of the q values of the chosen actions only, on each batch
+            offset += head_width
+        chosen_q = torch.cat(list_of_chosen_q, dim=1).mean(dim=1)  # (batch_size,)  average of the q values of the chosen actions only, on each batch
 
         # Compute TD targets and advantages
-        td_targets = rewards + self.gamma * next_state_values * (1 - dones)
-        advantages = chosen_q.detach() - state_values      # A = Q - V
+        td_targets = rewards + self.gamma * next_state_values * (1 - dones) # td_target = r + γ·maxₐ′ Q(s′, a′)
+        advantages = chosen_q.detach() - state_values      # A = Q - V Positive means the action is better than expected.
 
         if random.random() < 0.001:
             print(f'state_values, mean : {state_values.mean()}, max : {state_values.max()}, min : {state_values.min()}')
@@ -152,19 +188,33 @@ class TanksAgent:
         
         for i, size in enumerate(self.action_sizes):
             # Extract probabilities for this action type
-            probs = action_probs[:, offset:offset+size]
+            probs = action_probs[:, offset:offset+size]  # (batch_size, 3) -> [0.1, 0.2, 0.7]
             
             # Get the actions taken for this type
-            action_i = actions_tensor[:, i]
+            action_i = actions_tensor[:, i]  # (batch_size, 1) -> [2]
             
             # Calculate log probabilities of chosen actions
-            log_probs = torch.log(torch.gather(probs, 1, action_i.unsqueeze(1)) + 1e-10)
+            log_probs = torch.log(torch.gather(probs, 1, action_i.unsqueeze(1)) + 1e-10) # inside the log, we get the probability of the chosen action than we log it. 
             
             # Policy gradient loss: -log(π(a|s)) * advantage
-            policy_loss -= torch.mean(log_probs.squeeze() * advantages.detach())
+            policy_loss -= torch.mean(log_probs.squeeze() * advantages.detach()) # we multiply the log of the probability of the chosen action by the advantage of the action.
             
+            # --- POLICY LOSS EXPLAINED ---
+            # Case 1 : Bad action with high probability
+            # probs = [0.1, 0.2, 0.7], action_i = [2], log_probs = log(0.7) = 0.30
+            # advantage = -0.5, loss = -0.30 * -0.5 = 0.15 --> during the backprop it will push the actor to lower the prob of that action. 
+
+            # Case 2 : Good action with low probability
+            # probs = [0.1, 0.2, 0.7], action_i = [0], log_probs = log(0.1) = -2.30
+            # advantage = 0.5, loss = -2.30 * 0.5 = -1.15 --> during the backprop it will push the actor to increase the prob of that action. 
+
+            # Case 3 : Good action with high probability
+            # probs = [0.1, 0.2, 0.7], action_i = [0], log_probs = log(0.7) = 0.30
+            # advantage = 0.5, loss = 0.30 * 0.5 = 0.15 --> during the backprop it will push the actor to increase the prob of that action. (but not as much as the other cases)
+
+
             # Entropy loss for exploration: -Σ π(a|s) * log(π(a|s))
-            entropy_i = -torch.mean(torch.sum(probs * torch.log(probs + 1e-10), dim=1))
+            entropy_i = -torch.mean(torch.sum(probs * torch.log(probs + 1e-10), dim=1)) # we sum the log of the probabilities of all actions and we multiply it by the probability of the action. So, the entropy loss is high when the actions are not uniform.
             entropy_loss += entropy_i
             
             offset += size
