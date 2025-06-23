@@ -2,7 +2,7 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from tanks_model import ActorCModel, CriticModel
+from tanks_model import ActorModel, CriticModel
 from collections import namedtuple, deque
 import random
 from tanks_paths import TANK_1_WEIGHTS, TANK_2_WEIGHTS
@@ -11,18 +11,17 @@ device = torch.device("mps") if torch.backends.mps.is_available() else torch.dev
 device = 'cpu'  # Uncomment to force CPU
 
 class TanksAgent:
-    def __init__(self, state_size, action_sizes, gamma, learning_rate, short_memory_size, long_memory_size, entropy_coeff=0.01, value_loss_coeff=0.5, policy_loss_coeff=0.1, load_model=False):
+    def __init__(self, state_size, action_sizes, gamma, learning_rate, short_memory_size, long_memory_size, entropy_coeff=0.01, policy_loss_coeff=1.0, load_model=False):
         self.state_size = state_size
         self.action_sizes = action_sizes
         self.gamma = gamma
         self.learning_rate = learning_rate
         self.entropy_coeff = entropy_coeff
-        self.value_loss_coeff = value_loss_coeff
         self.policy_loss_coeff = policy_loss_coeff
         self.is_agent_1 = True  # Default to agent 1, can be changed after initialization
 
         # Create separate actor and critic models
-        self.actor = ActorCModel(state_size, action_sizes).to(device)
+        self.actor = ActorModel(state_size, action_sizes).to(device)
         self.critic = CriticModel(state_size, action_sizes).to(device)
         
         # Create separate optimizers for actor and critic
@@ -106,7 +105,7 @@ class TanksAgent:
             memory = self.long_memory
 
         if len(memory) < batch_size:  # Use provided batch size
-            return {"policy_loss": 0, "value_loss": 0, "entropy_loss": 0, "total_loss": 0}
+            return {"total_loss": 0, "actor_loss": 0, "critic_loss": 0}
 
         batch = random.sample(memory, batch_size)
         states, actions, rewards, next_states, dones = zip(*batch)
@@ -119,17 +118,26 @@ class TanksAgent:
 
         # Get current policy and value predictions
         action_probs = self.actor(states)
-        state_values = self.critic(states)
+        q_values, state_values = self.critic(states)       # Q(s,*), V(s)
 
         # Compute next state values
         with torch.no_grad():
-            next_state_values = self.critic(next_states)
-            next_state_values = next_state_values.squeeze(-1)
+            q_next, _ = self.critic(next_states)           # Q(s',*)
+            next_state_values = q_next.max(dim=1).values   # max_a' Q(s',a')
 
-        # Compute TD targets with clipping to prevent saturation
-        next_value_term = self.gamma * next_state_values * (1 - dones)
-        td_targets = rewards + next_value_term
-        advantages = td_targets - state_values.squeeze(-1)
+        # Select Q(s,a) played (average over all action heads)
+        chosen_q = []
+        offset = 0
+        for i, size in enumerate(self.action_sizes):
+            a_i = actions_tensor[:, i]                     # (B,)
+            q_i  = q_values[:, offset:offset+size]         # (B,size)
+            chosen_q.append( q_i.gather(1, a_i.unsqueeze(1)) )
+            offset += size
+        chosen_q = torch.cat(chosen_q, dim=1).mean(dim=1)  # (B,)  moyenne des 4 têtes
+
+        # Compute TD targets and advantages
+        td_targets = rewards + self.gamma * next_state_values * (1 - dones)
+        advantages = chosen_q.detach() - state_values      # A = Q - V
 
         if random.random() < 0.001:
             print(f'state_values, mean : {state_values.mean()}, max : {state_values.max()}, min : {state_values.min()}')
@@ -161,12 +169,11 @@ class TanksAgent:
             
             offset += size
 
-        # Value loss with clipping to prevent explosion
-        td_error = td_targets.detach() - state_values.squeeze(-1)
+        # Critic loss : MSE(Q(s,a), td_target)
+        td_error = td_targets.detach() - chosen_q
         if random.random() < 0.001:
             print(f'td_error, mean : {td_error.mean()}, max : {td_error.max()}, min : {td_error.min()}')
-        # Use Smooth L1 Loss instead of MSE to be less sensitive to outliers
-        value_loss = nn.SmoothL1Loss()(state_values.squeeze(-1), td_targets.detach())
+        critic_loss = torch.nn.functional.mse_loss(chosen_q, td_targets.detach())
 
         # Backpropagation for actor (policy network)
         actor_loss = self.policy_loss_coeff * policy_loss - self.entropy_coeff * entropy_loss
@@ -176,7 +183,6 @@ class TanksAgent:
         self.actor_optimizer.step()
         
         # Backpropagation for critic (value network)
-        critic_loss = self.value_loss_coeff * value_loss
         self.critic_optimizer.zero_grad()
         critic_loss.backward()
         nn.utils.clip_grad_norm_(self.critic.parameters(), max_norm=1.0)
@@ -187,10 +193,9 @@ class TanksAgent:
         
         # Return loss values for visualization
         return {
-            "policy_loss": policy_loss.item(),
-            "value_loss": value_loss.item(),
-            "entropy_loss": entropy_loss.item(),
-            "total_loss": total_loss.item()
+            "total_loss": total_loss.item(),
+            "actor_loss": actor_loss.item(),
+            "critic_loss": critic_loss.item()
         }
         
     def adjust_learning_rate(self, factor):

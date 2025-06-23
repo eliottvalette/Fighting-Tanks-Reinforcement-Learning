@@ -131,79 +131,42 @@ class TrainingVisualizer:
         plt.close()
         
     def plot_loss_curves(self):
-        """Create a double plot (side-by-side subplots) for all losses of each agent."""
+        """Create a double plot (side-by-side subplots) for all losses of each agent, including actor_loss and critic_loss."""
         if not self.losses_agent1 and not self.losses_agent2:
             print("No loss data available")
             return
 
-        # Prepare loss types for each agent
-        loss_types_agent1 = list(self.losses_agent1.keys())
-        loss_types_agent2 = list(self.losses_agent2.keys())
-
         # Set up color and style schemes
-        colors = ['red', 'blue', 'green', 'yellow', 'purple']
+        colors = ['#003049', '#006DAA', '#D62828', '#F77F00', '#FCBF49', '#EAE2B7']
 
         # Create a double plot (side-by-side subplots)
         fig, axes = plt.subplots(1, 2, figsize=(18, 8), sharey=True)
-        agent_titles = ['Agent 1', 'Agent 2']
 
-        # Plot for Agent 1
+        # Plot for actor_loss of agent 1 and agent 2
         ax = axes[0]
-        for i, loss_type in enumerate(sorted(loss_types_agent1)):
-            color = colors[i % len(colors)]
-            ax.plot(self.losses_agent1[loss_type], color=color, linewidth=2, label=loss_type)
-            # Add moving average for total_loss if available
-            if loss_type == 'total_loss':
-                window_size = min(15, len(self.losses_agent1['total_loss']))
-                if window_size > 1:
-                    moving_avg = np.convolve(self.losses_agent1['total_loss'],
-                                            np.ones(window_size)/window_size, mode='valid')
-                    ax.plot(np.arange(window_size-1, len(self.losses_agent1['total_loss'])),
-                            moving_avg, 'k-', linewidth=3, alpha=0.7,
-                            label=f'total_loss (MA{window_size})')
-        ax.set_title(f'All Loss Components - {agent_titles[0]}', fontsize=16, fontweight='bold')
+        color_1 = colors[0]
+        color_2 = colors[-1]
+        ax.plot(self.losses_agent1['actor_loss'], color=color_1, linewidth=2, label='actor_loss')
+        ax.plot(self.losses_agent1['actor_loss'], color=color_2, linewidth=2, label='actor_loss')
+        ax.set_title(f'Actor Losses of Both Agents', fontsize=16, fontweight='bold')
         ax.set_xlabel('Training Steps', fontsize=14)
         ax.set_ylabel('Loss Value', fontsize=14)
         ax.grid(True, alpha=0.5)
         ax.tick_params(axis='both', which='major', labelsize=12)
-        if len(loss_types_agent1) > 4:
-            ncol = 2
-            loc = 'upper center'
-            bbox_to_anchor = (0.5, -0.1)
-        else:
-            ncol = 1
-            loc = 'best'
-            bbox_to_anchor = None
-        ax.legend(loc=loc, fontsize=12, framealpha=0.7, fancybox=True, shadow=True, ncol=ncol, bbox_to_anchor=bbox_to_anchor)
+        ax.legend(loc='best', fontsize=12, framealpha=0.7, fancybox=True, shadow=True)
         ax.set_yscale('symlog', linthresh=0.01)
 
-        # Plot for Agent 2
+        # Plot for critic_loss of agent 1 and agent 2
         ax = axes[1]
-        for i, loss_type in enumerate(sorted(loss_types_agent2)):
-            color = colors[i % len(colors)]
-            ax.plot(self.losses_agent2[loss_type], color=color, linewidth=2, label=loss_type)
-            # Add moving average for total_loss if available
-            if loss_type == 'total_loss':
-                window_size = min(15, len(self.losses_agent2['total_loss']))
-                if window_size > 1:
-                    moving_avg = np.convolve(self.losses_agent2['total_loss'],
-                                            np.ones(window_size)/window_size, mode='valid')
-                    ax.plot(np.arange(window_size-1, len(self.losses_agent2['total_loss'])),
-                            moving_avg, 'k-', linewidth=3, alpha=0.7,
-                            label=f'total_loss (MA{window_size})')
-        ax.set_title(f'All Loss Components - {agent_titles[1]}', fontsize=16, fontweight='bold')
+        color_1 = colors[1]
+        color_2 = colors[-2]
+        ax.plot(self.losses_agent2['critic_loss'], color=color_1, linewidth=2, label='critic_loss')
+        ax.plot(self.losses_agent2['critic_loss'], color=color_2, linewidth=2, label='critic_loss')
+        ax.set_title(f'Critic Losses of Both Agents', fontsize=16, fontweight='bold')
         ax.set_xlabel('Training Steps', fontsize=14)
         ax.grid(True, alpha=0.5)
         ax.tick_params(axis='both', which='major', labelsize=12)
-        if len(loss_types_agent2) > 4:
-            ncol = 2
-            loc = 'upper center'
-            bbox_to_anchor = (0.5, -0.1)
-        else:
-            ncol = 1
-            loc = 'best'
-            bbox_to_anchor = None
-        ax.legend(loc=loc, fontsize=12, framealpha=0.7, fancybox=True, shadow=True, ncol=ncol, bbox_to_anchor=bbox_to_anchor)
+        ax.legend(loc='best', fontsize=12, framealpha=0.7, fancybox=True, shadow=True)
         ax.set_yscale('symlog', linthresh=0.01)
 
         plt.suptitle('Loss Curves for Both Agents', fontsize=18, fontweight='bold')
@@ -213,15 +176,7 @@ class TrainingVisualizer:
         plt.savefig(os.path.join(self.save_dir_png, 'loss_curves.png'), dpi=300, bbox_inches='tight')
         plt.close()
 
-        # No need for the separate combined total loss plot anymore since everything is combined
-        # Delete the old combined_total_loss.png if it exists
-        combined_loss_path = os.path.join(self.save_dir_png, 'combined_total_loss.png')
-        if os.path.exists(combined_loss_path):
-            try:
-                os.remove(combined_loss_path)
-            except:
-                pass
-        
+
     def plot_reward_histogram(self, bins=20):
         """Plot histogram of rewards to analyze distribution."""
         plt.figure(figsize=(10, 6))

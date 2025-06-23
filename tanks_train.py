@@ -23,6 +23,7 @@ STATE_SIZE = 30 + 1 # +1 for Value
 SHORT_MEMORY_SIZE = MAX_STEPS
 LONG_MEMORY_SIZE = 10000
 LONG_MEMORY_UPDATE_FREQUENCY = 100
+OFF_POLICY_TRAINING = False
 
 def set_seed(seed=42):
     rd.seed(seed)
@@ -57,7 +58,7 @@ def run_episode(agent_1 : TanksAgent, agent_2 : TanksAgent, epsilon, rendering, 
         actions_1 = agent_1.get_action(state=state_1, epsilon=epsilon, action_sizes=agent_1.action_sizes)
         next_state_1, reward_1, done, _ = env.step(actions_1, num_tank=1)
         agent_1.remember_short(state_1, actions_1, reward_1, next_state_1, done)
-        if (step_count + long_memory_episode_delay) % LONG_MEMORY_UPDATE_FREQUENCY == 0:
+        if (step_count + long_memory_episode_delay) % LONG_MEMORY_UPDATE_FREQUENCY == 0 and OFF_POLICY_TRAINING:
             agent_1.remember_long(state_1, actions_1, reward_1, next_state_1, done)
 
         # Collect actions for visualization
@@ -67,7 +68,7 @@ def run_episode(agent_1 : TanksAgent, agent_2 : TanksAgent, epsilon, rendering, 
         state_tensor = torch.FloatTensor(state_1).unsqueeze(0)
         agent_1.critic.eval()  # Set critic model to evaluation mode for inference
         with torch.no_grad():
-            value = agent_1.critic(state_tensor)
+            _, value = agent_1.critic(state_tensor)
             episode_values.append(value.item())
         agent_1.critic.train()  # Set critic model back to training mode
 
@@ -76,7 +77,7 @@ def run_episode(agent_1 : TanksAgent, agent_2 : TanksAgent, epsilon, rendering, 
         actions_2 = agent_2.get_action(state_2, epsilon=epsilon, action_sizes=agent_2.action_sizes)
         next_state_2, reward_2, done, _ = env.step(actions_2, num_tank=2)
         agent_2.remember_short(state_2, actions_2, reward_2, next_state_2, done)
-        if (step_count + long_memory_episode_delay) % LONG_MEMORY_UPDATE_FREQUENCY == 0:
+        if (step_count + long_memory_episode_delay) % LONG_MEMORY_UPDATE_FREQUENCY == 0 and OFF_POLICY_TRAINING:
             agent_2.remember_long(state_2, actions_2, reward_2, next_state_2, done)
 
         # Collect actions for visualization
@@ -86,7 +87,7 @@ def run_episode(agent_1 : TanksAgent, agent_2 : TanksAgent, epsilon, rendering, 
         state_tensor = torch.FloatTensor(state_2).unsqueeze(0)
         agent_2.critic.eval()  # Set critic model to evaluation mode for inference
         with torch.no_grad():
-            value = agent_2.critic(state_tensor)
+            _, value = agent_2.critic(state_tensor)
             episode_values.append(value.item())
         agent_2.critic.train()  # Set critic model back to training mode
 
@@ -101,8 +102,8 @@ def run_episode(agent_1 : TanksAgent, agent_2 : TanksAgent, epsilon, rendering, 
             env.render(rendering=True, clock=60, epsilon=epsilon)  # Reduced clock speed for better visualization
 
     # Additional batch training at the end of the episode
-    losses_1 = agent_1.train_model_batch(batch_size=32, short_memory = False)
-    losses_2 = agent_2.train_model_batch(batch_size=32, short_memory = False)
+    losses_1 = agent_1.train_model_batch(batch_size=32, short_memory = not OFF_POLICY_TRAINING)
+    losses_2 = agent_2.train_model_batch(batch_size=32, short_memory = not OFF_POLICY_TRAINING)
     
     # Record metrics if visualizer is provided
     if visualizer:
@@ -170,7 +171,7 @@ if __name__ == "__main__":
         gamma=GAMMA,
         learning_rate=ALPHA,
         entropy_coeff=0.01,  # Decreased for more exploitation
-        value_loss_coeff=1.0,  # Increased to prioritize value learning
+        policy_loss_coeff=1.0,
         load_model=False,
         short_memory_size=SHORT_MEMORY_SIZE,
         long_memory_size=LONG_MEMORY_SIZE,
@@ -184,7 +185,7 @@ if __name__ == "__main__":
         gamma=GAMMA,
         learning_rate=ALPHA,
         entropy_coeff=0.01,  # Decreased for more exploitation
-        value_loss_coeff=1.0,  # Increased to prioritize value learning
+        policy_loss_coeff=1.0,
         load_model=False,
         short_memory_size=SHORT_MEMORY_SIZE,
         long_memory_size=LONG_MEMORY_SIZE,
