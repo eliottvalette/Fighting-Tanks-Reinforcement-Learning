@@ -439,8 +439,8 @@ class TanksGame:
                 tank.reward += 0.6
         
         if tank.looking_block:
-            tank.reward -= 0.5
-        
+            tank.reward -= 1.5
+            
         if fire_action == 0 and not tank.check_cooldown(time.time()):
             tank.reward -= 0.5
 
@@ -518,7 +518,8 @@ class TanksGame:
             score_rect.topleft = (10, 10)
             
             # Add current reward display
-            reward_text = score_font.render(f"Current reward: {tank.reward:.2f}", True, (0, 0, 0))
+            denormalized_reward = tank.reward * 10
+            reward_text = score_font.render(f"Current reward: {denormalized_reward:.2f}", True, (0, 0, 0))
             reward_rect = reward_text.get_rect()
             reward_rect.topleft = (10, 30)
         else:
@@ -527,7 +528,8 @@ class TanksGame:
             score_rect.topright = (SCREEN_WIDTH - 10, 10)
             
             # Add current reward display
-            reward_text = score_font.render(f"Current reward: {tank.reward:.2f}", True, (0, 0, 0))
+            denormalized_reward = tank.reward * 10
+            reward_text = score_font.render(f"Current reward: {denormalized_reward:.2f}", True, (0, 0, 0))
             reward_rect = reward_text.get_rect()
             reward_rect.topright = (SCREEN_WIDTH - 10, 30)
 
@@ -725,40 +727,66 @@ if __name__ == "__main__":
             new_angle = new_angle_2 if i == 1 else new_angle_1
             
             # Base penalty for each frame
-            tank.reward = -0.1
+            tank.reward = -0.05  # Changed from -0.1 to match step method
             
-            # Reward for maintaining optimal distance
+            # Reward for maintaining optimal distance (not too far, not too close)
             optimal_distance_max = 500  # Pixels
             optimal_distance_min = 300  # Pixels
             distance_reward = max(0, 1 - abs(new_distance - optimal_distance_max) / optimal_distance_max)
             tank.reward += distance_reward
 
-            if new_distance < previous_distance :
+            # Changed values to match step method (0.5 -> 0.25, etc.)
+            if new_distance < previous_distance:
                 if new_distance > optimal_distance_max:
-                    tank.reward += 0.5
+                    tank.reward += 0.25
                 else:
-                    tank.reward -= 0.5
+                    tank.reward -= 0.25
             elif new_distance > previous_distance:
                 if new_distance < optimal_distance_min:
                     tank.reward += 0.5
                 else:
                     tank.reward -= 0.5
             
-            # Penalty for not facing the opponent
-            tank.reward -= 5 * new_angle
-            
-            # Reward for getting better angle/position
+            # Reward for getting better angle/position compared to previous
             if new_angle < previous_angle:
-                tank.reward += 0.2
+                tank.reward += 0.1  # Changed from 0.2 to match step method
                 
-            # Reward for line of sight
+            # Reward for line of sight and successful firing strategy
             if tank.in_line_of_sight:
-                tank.reward += 2
+                tank.reward += 0.3  # Changed from 2.0 to match step method
+                # Check if fire key was pressed for this tank
+                if (num_tank == 1 and keys[pygame.K_f]) or (num_tank == 2 and keys[pygame.K_k]):
+                    tank.reward += 0.6  # Added firing reward when in sight
+            
+            if tank.looking_block:
+                tank.reward -= 1.5  # Added looking at block penalty
                 
-            # Penalties
+            # Check if fired but not ready
+            if ((num_tank == 1 and keys[pygame.K_f]) or (num_tank == 2 and keys[pygame.K_k])) and not tank.check_cooldown(time.time()):
+                tank.reward -= 0.5  # Added penalty for firing when not ready
+                
+            # Penalties for being against wall
             laser_distances = np.array(game.get_all_laser_distances(LASER_MAX_SIZE)[num_tank - 1])
             if game.is_head_against_the_wall(laser_distances):
-                tank.reward -= 3
+                tank.reward -= 1  # Changed from -3 to match step method
+                
+            # Reward for hitting and penalties for being hit
+            if opponent_tank.was_hit:
+                tank.reward += 2  # Added reward for successful hit
+                opponent_tank.was_hit = False
+
+            if tank.was_hit:
+                tank.reward -= 2  # Added penalty for being hit
+                tank.was_hit = False
+                
+            # Game end conditions
+            if game.lost(tank):
+                tank.reward -= 20  # Added penalty for losing
+            elif game.lost(opponent_tank):
+                tank.reward += 20  # Added reward for winning
+            
+            # Normalize reward
+            tank.reward *= 0.1  # Added normalization to match step method
                 
             # Update total reward
             tank.total_reward += tank.reward

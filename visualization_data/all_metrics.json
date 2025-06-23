@@ -1,1 +1,1 @@
-{"rewards": [23.503501122422946], "episode_lengths": [1001], "epsilon": [0.5], "losses": {"policy_loss": [-0.11442051827907562], "value_loss": [0.023176409304142], "entropy_loss": [3.1507925987243652], "total_loss": [-0.12275203317403793]}, "additional_metrics": {}}
+{"rewards": [17.30350090181006], "episode_lengths": [652], "epsilon": [0.5], "losses": {"policy_loss": [0], "value_loss": [0], "entropy_loss": [0], "total_loss": [0]}, "additional_metrics": {}}
