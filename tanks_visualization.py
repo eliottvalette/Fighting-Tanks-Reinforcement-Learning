@@ -112,42 +112,64 @@ class TrainingVisualizer:
         rewards = np.array(self.rewards_history)
         episodes = np.arange(len(rewards))
         
-        # Calculate moving average
-        moving_avg = np.convolve(rewards, np.ones(window_size)/window_size, mode='valid')
-        
-        plt.figure(figsize=(12, 6))
-        plt.plot(episodes, rewards, alpha=0.3, color='blue', label='Raw rewards')
-        plt.plot(np.arange(window_size-1, len(rewards)), moving_avg, 
-                color='blue', linewidth=2, label=f'{window_size}-episode moving average')
-        
-        plt.xlabel('Episode')
-        plt.ylabel('Total Reward')
-        plt.title('Training Reward Curve')
-        plt.grid(True, alpha=0.3)
-        plt.legend()
+        # Check if we have enough data for moving average
+        if len(rewards) < window_size:
+            # If not enough data, just plot raw rewards
+            plt.figure(figsize=(12, 6))
+            plt.plot(episodes, rewards, alpha=0.7, color='blue', label='Raw rewards')
+            plt.xlabel('Episode')
+            plt.ylabel('Total Reward')
+            plt.title('Training Reward Curve (Insufficient data for moving average)')
+            plt.grid(True, alpha=0.3)
+            plt.legend()
+        else:
+            # Calculate moving average only if we have enough data
+            moving_avg = np.convolve(rewards, np.ones(window_size)/window_size, mode='valid')
+            
+            plt.figure(figsize=(12, 6))
+            plt.plot(episodes, rewards, alpha=0.3, color='blue', label='Raw rewards')
+            plt.plot(np.arange(window_size-1, len(rewards)), moving_avg, 
+                    color='blue', linewidth=2, label=f'{window_size}-episode moving average')
+            
+            plt.xlabel('Episode')
+            plt.ylabel('Total Reward')
+            plt.title('Training Reward Curve')
+            plt.grid(True, alpha=0.3)
+            plt.legend()
         
         # Save the figure
         plt.savefig(os.path.join(self.save_dir_png, 'reward_curve.png'), dpi=300, bbox_inches='tight')
         plt.close()
         
     def plot_loss_curves(self):
-        """Create a double plot (side-by-side subplots) for all losses of each agent, including actor_loss and critic_loss."""
+        """Create a double plot for all losses of each agent, including actor_loss and critic_loss."""
         if not self.losses_agent1 and not self.losses_agent2:
             print("No loss data available")
+            return
+
+        # Check if we have the required loss data
+        if 'actor_loss' not in self.losses_agent1 or 'actor_loss' not in self.losses_agent2 or \
+           'critic_loss' not in self.losses_agent1 or 'critic_loss' not in self.losses_agent2:
+            print("Missing required loss data (actor_loss or critic_loss)")
+            return
+
+        # Check if loss arrays are not empty
+        if len(self.losses_agent1['actor_loss']) == 0 or len(self.losses_agent2['actor_loss']) == 0 or \
+           len(self.losses_agent1['critic_loss']) == 0 or len(self.losses_agent2['critic_loss']) == 0:
+            print("Loss arrays are empty")
             return
 
         # Set up color and style schemes
         colors = ['#003049', '#006DAA', '#D62828', '#F77F00', '#FCBF49', '#EAE2B7']
 
-        # Create a double plot (side-by-side subplots)
-        fig, axes = plt.subplots(1, 2, figsize=(18, 8), sharey=True)
+        fig, axes = plt.subplots(1, 2, figsize=(16, 6), sharey=True)
 
         # Plot for actor_loss of agent 1 and agent 2
         ax = axes[0]
         color_1 = colors[0]
         color_2 = colors[-1]
-        ax.plot(self.losses_agent1['actor_loss'], color=color_1, linewidth=2, label='actor_loss')
-        ax.plot(self.losses_agent1['actor_loss'], color=color_2, linewidth=2, label='actor_loss')
+        ax.plot(self.losses_agent1['actor_loss'], color=color_1, linewidth=2, label='Actor Loss Agent 1')
+        ax.plot(self.losses_agent2['actor_loss'], color=color_2, linewidth=2, label='Actor Loss Agent 2')
         ax.set_title(f'Actor Losses of Both Agents', fontsize=16, fontweight='bold')
         ax.set_xlabel('Training Steps', fontsize=14)
         ax.set_ylabel('Loss Value', fontsize=14)
@@ -160,8 +182,8 @@ class TrainingVisualizer:
         ax = axes[1]
         color_1 = colors[1]
         color_2 = colors[-2]
-        ax.plot(self.losses_agent2['critic_loss'], color=color_1, linewidth=2, label='critic_loss')
-        ax.plot(self.losses_agent2['critic_loss'], color=color_2, linewidth=2, label='critic_loss')
+        ax.plot(self.losses_agent1['critic_loss'], color=color_1, linewidth=2, label='Critic Loss Agent 1')
+        ax.plot(self.losses_agent2['critic_loss'], color=color_2, linewidth=2, label='Critic Loss Agent 2')
         ax.set_title(f'Critic Losses of Both Agents', fontsize=16, fontweight='bold')
         ax.set_xlabel('Training Steps', fontsize=14)
         ax.grid(True, alpha=0.5)
@@ -179,6 +201,10 @@ class TrainingVisualizer:
 
     def plot_reward_histogram(self, bins=20):
         """Plot histogram of rewards to analyze distribution."""
+        if not self.rewards_history:
+            print("No reward data available for histogram")
+            return
+            
         plt.figure(figsize=(10, 6))
         
         sns.histplot(self.rewards_history, bins=bins, kde=True)
@@ -249,6 +275,10 @@ class TrainingVisualizer:
         for episode_values in self.value_distributions:
             all_values.extend(episode_values)
         
+        if not all_values:
+            print("No value data available for distribution plot")
+            return
+            
         plt.figure(figsize=(10, 6))
         sns.histplot(all_values, bins=50, kde=True)
         plt.axvline(np.mean(all_values), color='red', linestyle='dashed', 
@@ -265,6 +295,10 @@ class TrainingVisualizer:
         
     def plot_epsilon_decay(self):
         """Plot the exploration rate (epsilon) over time."""
+        if not self.epsilon_history:
+            print("No epsilon data available")
+            return
+            
         plt.figure(figsize=(10, 6))
         plt.plot(self.epsilon_history)
         plt.xlabel('Episode')
@@ -279,6 +313,10 @@ class TrainingVisualizer:
         
     def plot_episode_lengths(self):
         """Plot episode lengths over time."""
+        if not self.episode_lengths:
+            print("No episode length data available")
+            return
+            
         plt.figure(figsize=(10, 6))
         plt.plot(self.episode_lengths)
         plt.xlabel('Episode')

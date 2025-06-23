@@ -377,7 +377,7 @@ class TanksGame:
         opponent_tank = getattr(self, f'tank_{3 - num_tank}')
         opponent_position = getattr(self, f'position_{3 - num_tank}')
 
-        tank.reward = -0.05  # Base penalty for each step to encourage efficient behavior
+        tank.reward = -1.5  # Base penalty for each step to encourage efficient behavior
 
         move_action, rotate_action, strafe_action, fire_action = actions
 
@@ -472,9 +472,6 @@ class TanksGame:
             done = True
         else:
             done = False
-        
-        # Normalize reward
-        tank.reward *= 0.1
 
         self.current_step += 1
         tank.total_reward += tank.reward
@@ -518,7 +515,7 @@ class TanksGame:
             score_rect.topleft = (10, 10)
             
             # Add current reward display
-            denormalized_reward = tank.reward * 10
+            denormalized_reward = tank.reward * 1
             reward_text = score_font.render(f"Current reward: {denormalized_reward:.2f}", True, (0, 0, 0))
             reward_rect = reward_text.get_rect()
             reward_rect.topleft = (10, 30)
@@ -528,7 +525,7 @@ class TanksGame:
             score_rect.topright = (SCREEN_WIDTH - 10, 10)
             
             # Add current reward display
-            denormalized_reward = tank.reward * 10
+            denormalized_reward = tank.reward * 1
             reward_text = score_font.render(f"Current reward: {denormalized_reward:.2f}", True, (0, 0, 0))
             reward_rect = reward_text.get_rect()
             reward_rect.topright = (SCREEN_WIDTH - 10, 30)
@@ -784,9 +781,6 @@ if __name__ == "__main__":
                 tank.reward -= 20  # Added penalty for losing
             elif game.lost(opponent_tank):
                 tank.reward += 20  # Added reward for winning
-            
-            # Normalize reward
-            tank.reward *= 0.1  # Added normalization to match step method
                 
             # Update total reward
             tank.total_reward += tank.reward

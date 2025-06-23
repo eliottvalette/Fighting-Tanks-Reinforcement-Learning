@@ -14,16 +14,17 @@ from tanks_paths import TANK_1_WEIGHTS, TANK_2_WEIGHTS, TANK_1_SAVE_WEIGHTS, TAN
 
 # Hyperparameters
 EPISODES = 5_000  # Increased to ensure convergence
-GAMMA = 0.99    # Standard discount factor
+GAMMA = 0.80    # Standard discount factor
 ALPHA = 0.0003  # Increased learning rate for faster learning
 GLOBAL_N = 11
 MAX_STEPS = 2000  # Round number
 EPS_DECAY = 0.99  # Slower decay for better exploration
 STATE_SIZE = 30 + 1 # +1 for Value
-SHORT_MEMORY_SIZE = MAX_STEPS
+SHORT_MEMORY_SIZE = MAX_STEPS // 2
 LONG_MEMORY_SIZE = 10000
 LONG_MEMORY_UPDATE_FREQUENCY = 100
 OFF_POLICY_TRAINING = False
+LOAD_MODEL = True
 
 def set_seed(seed=42):
     rd.seed(seed)
@@ -137,7 +138,7 @@ def main_training_loop(agent_1, agent_2, episodes, rendering, render_every=10):
                 agent_2.adjust_learning_rate(0.95)  # Reduce learning rate by 5% every 100 episodes
 
             # Save the trained models and generate visualizations every 30 episodes
-            if episode % 10 == 9:
+            if episode % 5 == 4:
                 agent_1.save(TANK_1_SAVE_WEIGHTS + f"_epoch_{episode+1}.pth")
                 agent_2.save(TANK_2_SAVE_WEIGHTS + f"_epoch_{episode+1}.pth")
                 
@@ -172,7 +173,7 @@ if __name__ == "__main__":
         learning_rate=ALPHA,
         entropy_coeff=0.01,  # Decreased for more exploitation
         policy_loss_coeff=1.0,
-        load_model=False,
+        load_model=LOAD_MODEL,
         short_memory_size=SHORT_MEMORY_SIZE,
         long_memory_size=LONG_MEMORY_SIZE,
     )
@@ -186,7 +187,7 @@ if __name__ == "__main__":
         learning_rate=ALPHA,
         entropy_coeff=0.01,  # Decreased for more exploitation
         policy_loss_coeff=1.0,
-        load_model=False,
+        load_model=LOAD_MODEL,
         short_memory_size=SHORT_MEMORY_SIZE,
         long_memory_size=LONG_MEMORY_SIZE,
     )

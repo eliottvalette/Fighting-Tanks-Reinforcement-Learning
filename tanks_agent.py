@@ -43,9 +43,18 @@ class TanksAgent:
         self.actor = ActorModel(state_size, action_sizes).to(device)
         self.critic = CriticModel(state_size, action_sizes).to(device)
         
+        # Create target critic for stable TD learning
+        self.target_critic = CriticModel(state_size, action_sizes).to(device)
+        self.target_critic.load_state_dict(self.critic.state_dict())
+        self.target_critic.eval()  # Target network is always in eval mode
+        
+        # Polyak averaging parameter for target network updates
+        self.tau = 0.005
+        
         # Create separate optimizers for actor and critic
         self.actor_optimizer = optim.Adam(self.actor.parameters(), lr=self.learning_rate)
-        self.critic_optimizer = optim.Adam(self.critic.parameters(), lr=self.learning_rate)
+        # Use lower learning rate for critic to prevent divergence
+        self.critic_optimizer = optim.Adam(self.critic.parameters(), lr=self.learning_rate * 0.1)
         
         self.short_memory = deque(maxlen=short_memory_size)
         self.long_memory = deque(maxlen=long_memory_size)
@@ -55,6 +64,13 @@ class TanksAgent:
             weights_file = TANK_1_WEIGHTS if self.is_agent_1 else TANK_2_WEIGHTS
             self.load(weights_file)
     
+    def update_target_network(self):
+        '''
+        Update target network using polyak averaging
+        '''
+        for param, target_param in zip(self.critic.parameters(), self.target_critic.parameters()):
+            target_param.data.mul_(1 - self.tau).add_(self.tau * param.data)
+    
     def load(self, filename='model_weights.pth'):
         '''
         Load the model weights from the file.
@@ -63,6 +79,8 @@ class TanksAgent:
             checkpoint = torch.load(filename, map_location=device)
             self.actor.load_state_dict(checkpoint['actor'])
             self.critic.load_state_dict(checkpoint['critic'])
+            # Also load target critic
+            self.target_critic.load_state_dict(checkpoint['critic'])
             print(f"Model weights loaded successfully from {filename}")
         except FileNotFoundError:
             print(f"No model weights found at {filename}. Starting with a new model.")
@@ -102,8 +120,8 @@ class TanksAgent:
             if training and random.random() < epsilon:
                 action = random.randint(0, size-1)
             else:
-                # Choose action with highest probability
-                action = torch.argmax(probs).item()
+                # Choose action with respect to the probabilities
+                action = torch.distributions.Categorical(probs).sample().item()
                 
             actions.append(action)
             offset += size
@@ -126,14 +144,15 @@ class TanksAgent:
                 (short = on-policy, long = off-policy).  
             2.  Compute
                     π_θ(a|s)                         # Actor network
-                    Q_ϕ(s, ·), V_ϕ(s)                # Critic network  
-                    Q_ϕ(s′, ·)                       # Critic network target for TD  
-                    td_target = r + γ·maxₐ′ Q(s′, a′)  
+                    Q_ϕ(s, ·), V_ϕ(s)                # Critic network (54 combinations)  
+                    Q_target(s′, ·)                  # Target critic network for TD  
+                    td_target = r + γ·maxₐ′ Q_target(s′, a′)  
                     advantage = Q(s,a) − V(s)  
             3.  Losses  
-                    critic_loss = MSE(Q(s,a), td_target)  
+                    critic_loss = Huber(Q(s,a), td_target)  
                     actor_loss  = −E[log π(a|s) · advantage] − β entropy  
             4.  Back-propagate and update the two optimisers.
+            5.  Update target network with polyak averaging.
         """
         if short_memory:
             memory = self.short_memory
@@ -154,25 +173,19 @@ class TanksAgent:
 
         # Get current policy and value predictions
         action_probs = self.actor(states)
-        q_values, state_values = self.critic(states)       # Q(s,*), V(s) => (batch_size, 11), (batch_size, 1)
+        q_values, state_values = self.critic(states)       # Q(s,*), V(s) => (batch_size, 54), (batch_size, 1)
 
-        # Compute next state values
+        # Compute next state values using target network for stability
         with torch.no_grad():
-            q_next, _ = self.critic(next_states)           # Q(s',*)
-            next_state_values = q_next.max(dim=1).values   # max_a' Q(s',a') => (batch_size, 1)
+            q_next, _ = self.target_critic(next_states)           # Q_target(s',*) => (batch_size, 54)
+            next_state_values = q_next.max(dim=1).values   # max_a' Q_target(s',a') => (batch_size, 1)
 
-        # Select Q(s,a) played (average over all action heads)
-        list_of_chosen_q = []
-        offset = 0
-        for head_idx, head_width in enumerate(self.action_sizes): # iterate over all 4 heads
-            chosen_action = actions_tensor[:, head_idx]                     # (batch_size, 1) (if in first head, and action is no move, chosen_action is 2)
-            q_head_slice  = q_values[:, offset:offset+head_width]           # (batch_size, head_width) q values of actions in head i
-            list_of_chosen_q.append(q_head_slice.gather(1, chosen_action.unsqueeze(1)) ) # (batch_size, 1) get the list of the q values of the chosen actions only, on each batch
-            offset += head_width
-        chosen_q = torch.cat(list_of_chosen_q, dim=1).mean(dim=1)  # (batch_size,)  average of the q values of the chosen actions only, on each batch
+        # Get Q-value for the chosen action combination (no more averaging!)
+        combo_idx = self.critic.get_action_combination_index(actions_tensor)
+        chosen_q = q_values.gather(1, combo_idx.unsqueeze(1)).squeeze(1)  # (batch_size,)
 
         # Compute TD targets and advantages
-        td_targets = rewards + self.gamma * next_state_values * (1 - dones) # td_target = r + γ·maxₐ′ Q(s′, a′)
+        td_targets = rewards + self.gamma * next_state_values * (1 - dones) # td_target = r + γ·maxₐ′ Q_target(s′, a′)
         advantages = chosen_q.detach() - state_values      # A = Q - V Positive means the action is better than expected.
 
         if random.random() < 0.001:
@@ -219,11 +232,11 @@ class TanksAgent:
             
             offset += size
 
-        # Critic loss : MSE(Q(s,a), td_target)
+        # Critic loss : Huber(Q(s,a), td_target) - more robust to outliers than MSE
         td_error = td_targets.detach() - chosen_q
         if random.random() < 0.001:
             print(f'td_error, mean : {td_error.mean()}, max : {td_error.max()}, min : {td_error.min()}')
-        critic_loss = torch.nn.functional.mse_loss(chosen_q, td_targets.detach())
+        critic_loss = torch.nn.functional.smooth_l1_loss(chosen_q, td_targets.detach())
 
         # Backpropagation for actor (policy network)
         actor_loss = self.policy_loss_coeff * policy_loss - self.entropy_coeff * entropy_loss
@@ -237,6 +250,9 @@ class TanksAgent:
         critic_loss.backward()
         nn.utils.clip_grad_norm_(self.critic.parameters(), max_norm=1.0)
         self.critic_optimizer.step()
+        
+        # Update target network with polyak averaging
+        self.update_target_network()
         
         # Calculate total loss for logging purposes
         total_loss = actor_loss + critic_loss
@@ -256,4 +272,4 @@ class TanksAgent:
         for param_group in self.actor_optimizer.param_groups:
             param_group['lr'] = self.learning_rate
         for param_group in self.critic_optimizer.param_groups:
-            param_group['lr'] = self.learning_rate
+            param_group['lr'] = self.learning_rate * 0.1  # Keep critic LR lower
