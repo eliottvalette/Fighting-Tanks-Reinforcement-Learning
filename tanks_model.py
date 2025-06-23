@@ -4,9 +4,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 import random as rd
 
-class ActorCriticModel(nn.Module):
+class ActorCModel(nn.Module):
     def __init__(self, state_size, action_sizes):
-        super(ActorCriticModel, self).__init__()
+        super(ActorCModel, self).__init__()
 
         # Enhanced shared layers with dropout for regularization
         self.shared_layers = nn.Sequential(
@@ -44,15 +44,6 @@ class ActorCriticModel(nn.Module):
             nn.Linear(128, 2)
         )
 
-        # Value stream with deeper architecture
-        self.value_stream = nn.Sequential(
-            nn.Linear(52, 128),
-            nn.BatchNorm1d(128),
-            nn.GELU(),
-            nn.Dropout(0.1),
-            nn.Linear(128, 1)
-        )
-
         # Action sizes to split the actor output
         self.action_sizes = action_sizes
 
@@ -73,9 +64,6 @@ class ActorCriticModel(nn.Module):
 
         action_probs = torch.cat([movement_probs, rotate_probs, strafe_probs, fire_probs], dim=1)
         
-        # Critic: Predict state value with centering and mild scaling
-        state_value = self.value_stream(shared_features)
-        
         if rd.random() < 0.001:
             print('________________________')
             print(f'movement_logits, mean : {movement_logits.mean()}, max : {movement_logits.max()}, min : {movement_logits.min()}')
@@ -86,7 +74,35 @@ class ActorCriticModel(nn.Module):
             print(f'action_probs_strafe : {strafe_probs.mean()}, max : {strafe_probs.max()}, min : {strafe_probs.min()}')
             print(f'fire_logits, mean : {fire_logits.mean()}, max : {fire_logits.max()}, min : {fire_logits.min()}')
             print(f'action_probs_fire : {fire_probs.mean()}, max : {fire_probs.max()}, min : {fire_probs.min()}')
+            print('________________________')
+
+        return action_probs
+
+class CriticModel(nn.Module):
+    def __init__(self, state_size, action_sizes):
+        super(CriticModel, self).__init__()
+
+        self.init_layers = nn.Sequential(
+            nn.Linear(state_size, 52),
+            nn.BatchNorm1d(52),
+            nn.GELU()
+        )
+
+        self.value_stream = nn.Sequential(
+            nn.Linear(52, 128),
+            nn.BatchNorm1d(128),
+            nn.GELU(),
+            nn.Dropout(0.1),
+            nn.Linear(128, 1)
+        )
+
+    def forward(self, state):
+        features = self.init_layers(state)
+        state_value = self.value_stream(features)
+        
+        if rd.random() < 0.001:
+            print('________________________')
             print(f'state_value, mean : {state_value.mean()}, max : {state_value.max()}, min : {state_value.min()}')
             print('________________________')
 
-        return action_probs, state_value
+        return state_value

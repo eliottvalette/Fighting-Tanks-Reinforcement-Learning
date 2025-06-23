@@ -21,7 +21,8 @@ class TrainingVisualizer:
         self.rewards_history = []
         self.episode_lengths = []
         self.epsilon_history = []
-        self.losses = defaultdict(list)  # {loss_name: [values]}
+        self.losses_agent1 = defaultdict(list)  # {loss_name: [values]} for agent 1
+        self.losses_agent2 = defaultdict(list)  # {loss_name: [values]} for agent 2
         self.action_distributions = []
         self.value_distributions = []
         
@@ -34,15 +35,21 @@ class TrainingVisualizer:
         self.backup_actions_file = os.path.join(save_dir_data, "actions_backup.pkl")
         self.backup_values_file = os.path.join(save_dir_data, "values_backup.pkl")
         
-    def record_episode(self, episode, reward, steps, epsilon, losses):
+    def record_episode(self, episode, reward, steps, epsilon, losses_1, losses_2):
         """Record metrics for a completed episode."""
         self.rewards_history.append(reward)
         self.episode_lengths.append(steps)
         self.epsilon_history.append(epsilon)
         
-        if losses:
-            for loss_name, loss_value in losses.items():
-                self.losses[loss_name].append(loss_value)
+        # Record losses for agent 1
+        if losses_1:
+            for loss_name, loss_value in losses_1.items():
+                self.losses_agent1[loss_name].append(loss_value)
+        
+        # Record losses for agent 2
+        if losses_2:
+            for loss_name, loss_value in losses_2.items():
+                self.losses_agent2[loss_name].append(loss_value)
                 
         # Save all metrics after every episode to ensure complete data
         self.save_metrics()
@@ -63,7 +70,8 @@ class TrainingVisualizer:
             'rewards': self.rewards_history,
             'episode_lengths': self.episode_lengths,
             'epsilon': self.epsilon_history,
-            'losses': dict(self.losses),
+            'losses_agent1': dict(self.losses_agent1),
+            'losses_agent2': dict(self.losses_agent2),
             'additional_metrics': dict(self.additional_metrics)
         }
         
@@ -123,26 +131,96 @@ class TrainingVisualizer:
         plt.close()
         
     def plot_loss_curves(self):
-        """Plot the various loss components over time."""
-        if not self.losses:
+        """Create a double plot (side-by-side subplots) for all losses of each agent."""
+        if not self.losses_agent1 and not self.losses_agent2:
             print("No loss data available")
             return
-            
-        plt.figure(figsize=(12, 8))
-        
-        for loss_name, loss_values in self.losses.items():
-            plt.plot(loss_values, label=loss_name)
-            
-        plt.xlabel('Training Step')
-        plt.ylabel('Loss Value')
-        plt.title('Training Loss Components')
-        plt.grid(True, alpha=0.3)
-        plt.legend()
-        plt.yscale('symlog', linthresh=0.01)  # Symmetric log scale with linear region near zero
-        
+
+        # Prepare loss types for each agent
+        loss_types_agent1 = list(self.losses_agent1.keys())
+        loss_types_agent2 = list(self.losses_agent2.keys())
+
+        # Set up color and style schemes
+        colors = ['red', 'blue', 'green', 'yellow', 'purple']
+
+        # Create a double plot (side-by-side subplots)
+        fig, axes = plt.subplots(1, 2, figsize=(18, 8), sharey=True)
+        agent_titles = ['Agent 1', 'Agent 2']
+
+        # Plot for Agent 1
+        ax = axes[0]
+        for i, loss_type in enumerate(sorted(loss_types_agent1)):
+            color = colors[i % len(colors)]
+            ax.plot(self.losses_agent1[loss_type], color=color, linewidth=2, label=loss_type)
+            # Add moving average for total_loss if available
+            if loss_type == 'total_loss':
+                window_size = min(15, len(self.losses_agent1['total_loss']))
+                if window_size > 1:
+                    moving_avg = np.convolve(self.losses_agent1['total_loss'],
+                                            np.ones(window_size)/window_size, mode='valid')
+                    ax.plot(np.arange(window_size-1, len(self.losses_agent1['total_loss'])),
+                            moving_avg, 'k-', linewidth=3, alpha=0.7,
+                            label=f'total_loss (MA{window_size})')
+        ax.set_title(f'All Loss Components - {agent_titles[0]}', fontsize=16, fontweight='bold')
+        ax.set_xlabel('Training Steps', fontsize=14)
+        ax.set_ylabel('Loss Value', fontsize=14)
+        ax.grid(True, alpha=0.5)
+        ax.tick_params(axis='both', which='major', labelsize=12)
+        if len(loss_types_agent1) > 4:
+            ncol = 2
+            loc = 'upper center'
+            bbox_to_anchor = (0.5, -0.1)
+        else:
+            ncol = 1
+            loc = 'best'
+            bbox_to_anchor = None
+        ax.legend(loc=loc, fontsize=12, framealpha=0.7, fancybox=True, shadow=True, ncol=ncol, bbox_to_anchor=bbox_to_anchor)
+        ax.set_yscale('symlog', linthresh=0.01)
+
+        # Plot for Agent 2
+        ax = axes[1]
+        for i, loss_type in enumerate(sorted(loss_types_agent2)):
+            color = colors[i % len(colors)]
+            ax.plot(self.losses_agent2[loss_type], color=color, linewidth=2, label=loss_type)
+            # Add moving average for total_loss if available
+            if loss_type == 'total_loss':
+                window_size = min(15, len(self.losses_agent2['total_loss']))
+                if window_size > 1:
+                    moving_avg = np.convolve(self.losses_agent2['total_loss'],
+                                            np.ones(window_size)/window_size, mode='valid')
+                    ax.plot(np.arange(window_size-1, len(self.losses_agent2['total_loss'])),
+                            moving_avg, 'k-', linewidth=3, alpha=0.7,
+                            label=f'total_loss (MA{window_size})')
+        ax.set_title(f'All Loss Components - {agent_titles[1]}', fontsize=16, fontweight='bold')
+        ax.set_xlabel('Training Steps', fontsize=14)
+        ax.grid(True, alpha=0.5)
+        ax.tick_params(axis='both', which='major', labelsize=12)
+        if len(loss_types_agent2) > 4:
+            ncol = 2
+            loc = 'upper center'
+            bbox_to_anchor = (0.5, -0.1)
+        else:
+            ncol = 1
+            loc = 'best'
+            bbox_to_anchor = None
+        ax.legend(loc=loc, fontsize=12, framealpha=0.7, fancybox=True, shadow=True, ncol=ncol, bbox_to_anchor=bbox_to_anchor)
+        ax.set_yscale('symlog', linthresh=0.01)
+
+        plt.suptitle('Loss Curves for Both Agents', fontsize=18, fontweight='bold')
+        plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+
         # Save the figure
         plt.savefig(os.path.join(self.save_dir_png, 'loss_curves.png'), dpi=300, bbox_inches='tight')
         plt.close()
+
+        # No need for the separate combined total loss plot anymore since everything is combined
+        # Delete the old combined_total_loss.png if it exists
+        combined_loss_path = os.path.join(self.save_dir_png, 'combined_total_loss.png')
+        if os.path.exists(combined_loss_path):
+            try:
+                os.remove(combined_loss_path)
+            except:
+                pass
         
     def plot_reward_histogram(self, bins=20):
         """Plot histogram of rewards to analyze distribution."""
@@ -238,6 +316,7 @@ class TrainingVisualizer:
         plt.ylabel('Epsilon (Exploration Rate)')
         plt.title('Exploration Rate Decay')
         plt.grid(True, alpha=0.3)
+        plt.ylim(0, 1)
         
         # Save the figure
         plt.savefig(os.path.join(self.save_dir_png, 'epsilon_decay.png'), dpi=300, bbox_inches='tight')
@@ -300,6 +379,18 @@ class TrainingVisualizer:
             'mean_episode_length': np.mean(self.episode_lengths) if self.episode_lengths else None,
         }
         
+        # Add agent 1 loss statistics if available
+        for loss_name, values in self.losses_agent1.items():
+            if values:
+                stats[f'agent1_mean_{loss_name}'] = np.mean(values)
+                stats[f'agent1_last_{loss_name}'] = values[-1] if values else None
+        
+        # Add agent 2 loss statistics if available
+        for loss_name, values in self.losses_agent2.items():
+            if values:
+                stats[f'agent2_mean_{loss_name}'] = np.mean(values)
+                stats[f'agent2_last_{loss_name}'] = values[-1] if values else None
+                
         # Add additional metrics if available
         for metric_name, values in self.additional_metrics.items():
             if values:
@@ -340,14 +431,15 @@ class TrainingVisualizer:
         plt.close()
 
 # Helper function to extract model insights
-def analyze_model(model, state_size):
+def analyze_model(actor, critic, state_size):
     """Analyze the trained model's weights and biases."""
     model_stats = {}
     
     # Generate a random batch of states to analyze model behavior
     test_states = torch.randn(100, state_size)
     with torch.no_grad():
-        action_probs, values = model(test_states)
+        action_probs = actor(test_states)
+        values = critic(test_states)
     
     # Analyze action probabilities
     action_stats = []

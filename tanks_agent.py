@@ -2,7 +2,7 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from tanks_model import ActorCriticModel
+from tanks_model import ActorCModel, CriticModel
 from collections import namedtuple, deque
 import random
 from tanks_paths import TANK_1_WEIGHTS, TANK_2_WEIGHTS
@@ -11,17 +11,24 @@ device = torch.device("mps") if torch.backends.mps.is_available() else torch.dev
 device = 'cpu'  # Uncomment to force CPU
 
 class TanksAgent:
-    def __init__(self, state_size, action_sizes, gamma, learning_rate, short_memory_size, long_memory_size, entropy_coeff=0.01, value_loss_coeff=0.5, load_model=False):
+    def __init__(self, state_size, action_sizes, gamma, learning_rate, short_memory_size, long_memory_size, entropy_coeff=0.01, value_loss_coeff=0.5, policy_loss_coeff=0.1, load_model=False):
         self.state_size = state_size
         self.action_sizes = action_sizes
         self.gamma = gamma
         self.learning_rate = learning_rate
         self.entropy_coeff = entropy_coeff
         self.value_loss_coeff = value_loss_coeff
+        self.policy_loss_coeff = policy_loss_coeff
         self.is_agent_1 = True  # Default to agent 1, can be changed after initialization
 
-        self.model = ActorCriticModel(state_size, action_sizes).to(device)
-        self.optimizer = optim.Adam(self.model.parameters(), lr=self.learning_rate)
+        # Create separate actor and critic models
+        self.actor = ActorCModel(state_size, action_sizes).to(device)
+        self.critic = CriticModel(state_size, action_sizes).to(device)
+        
+        # Create separate optimizers for actor and critic
+        self.actor_optimizer = optim.Adam(self.actor.parameters(), lr=self.learning_rate)
+        self.critic_optimizer = optim.Adam(self.critic.parameters(), lr=self.learning_rate)
+        
         self.short_memory = deque(maxlen=short_memory_size)
         self.long_memory = deque(maxlen=long_memory_size)
 
@@ -35,7 +42,9 @@ class TanksAgent:
         Load the model weights from the file.
         '''
         try:
-            self.model.load_state_dict(torch.load(filename, map_location=device))
+            checkpoint = torch.load(filename, map_location=device)
+            self.actor.load_state_dict(checkpoint['actor'])
+            self.critic.load_state_dict(checkpoint['critic'])
             print(f"Model weights loaded successfully from {filename}")
         except FileNotFoundError:
             print(f"No model weights found at {filename}. Starting with a new model.")
@@ -47,17 +56,21 @@ class TanksAgent:
         Save the model weights to a file.
         '''
         try:
-            torch.save(self.model.state_dict(), filename)
+            checkpoint = {
+                'actor': self.actor.state_dict(),
+                'critic': self.critic.state_dict()
+            }
+            torch.save(checkpoint, filename)
             print(f"Model weights saved to {filename}")
         except Exception as e:
             print(f"Error saving model weights: {e}")
     
     def get_action(self, state, epsilon, action_sizes, training=True):
         state_tensor = torch.FloatTensor(state).unsqueeze(0).to(device)
-        self.model.eval()
+        self.actor.eval()
         with torch.no_grad():
-            action_probs, _ = self.model(state_tensor)
-        self.model.train()
+            action_probs = self.actor(state_tensor)
+        self.actor.train()
 
         actions = []
         offset = 0
@@ -105,11 +118,12 @@ class TanksAgent:
         actions_tensor = torch.tensor(actions).to(device)
 
         # Get current policy and value predictions
-        action_probs, state_values = self.model(states)
+        action_probs = self.actor(states)
+        state_values = self.critic(states)
 
         # Compute next state values
         with torch.no_grad():
-            _, next_state_values = self.model(next_states)
+            next_state_values = self.critic(next_states)
             next_state_values = next_state_values.squeeze(-1)
 
         # Compute TD targets with clipping to prevent saturation
@@ -154,14 +168,22 @@ class TanksAgent:
         # Use Smooth L1 Loss instead of MSE to be less sensitive to outliers
         value_loss = nn.SmoothL1Loss()(state_values.squeeze(-1), td_targets.detach())
 
-        # Total loss
-        total_loss = policy_loss + self.value_loss_coeff * value_loss - self.entropy_coeff * entropy_loss
-
-        # Backpropagation
-        self.optimizer.zero_grad()
-        total_loss.backward()
-        nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
-        self.optimizer.step()
+        # Backpropagation for actor (policy network)
+        actor_loss = self.policy_loss_coeff * policy_loss - self.entropy_coeff * entropy_loss
+        self.actor_optimizer.zero_grad()
+        actor_loss.backward()
+        nn.utils.clip_grad_norm_(self.actor.parameters(), max_norm=1.0)
+        self.actor_optimizer.step()
+        
+        # Backpropagation for critic (value network)
+        critic_loss = self.value_loss_coeff * value_loss
+        self.critic_optimizer.zero_grad()
+        critic_loss.backward()
+        nn.utils.clip_grad_norm_(self.critic.parameters(), max_norm=1.0)
+        self.critic_optimizer.step()
+        
+        # Calculate total loss for logging purposes
+        total_loss = actor_loss + critic_loss
         
         # Return loss values for visualization
         return {
@@ -176,5 +198,7 @@ class TanksAgent:
         Adjust the learning rate by multiplying it by the given factor.
         '''
         self.learning_rate *= factor
-        for param_group in self.optimizer.param_groups:
+        for param_group in self.actor_optimizer.param_groups:
+            param_group['lr'] = self.learning_rate
+        for param_group in self.critic_optimizer.param_groups:
             param_group['lr'] = self.learning_rate
