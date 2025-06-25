@@ -142,7 +142,7 @@ class TrainingVisualizer:
         plt.close()
         
     def plot_loss_curves(self):
-        """Create a double plot for all losses of each agent, including actor_loss and critic_loss."""
+        """Create two separate figures for actor and critic losses of each agent."""
         if not self.losses_agent1 and not self.losses_agent2:
             print("No loss data available")
             return
@@ -162,40 +162,40 @@ class TrainingVisualizer:
         # Set up color and style schemes
         colors = ['#003049', '#006DAA', '#D62828', '#F77F00', '#FCBF49', '#EAE2B7']
 
-        fig, axes = plt.subplots(1, 2, figsize=(16, 6), sharey=True)
-
-        # Plot for actor_loss of agent 1 and agent 2
-        ax = axes[0]
+        # First figure: Actor losses
+        plt.figure(figsize=(12, 6))
         color_1 = colors[0]
         color_2 = colors[-1]
-        ax.plot(self.losses_agent1['actor_loss'], color=color_1, linewidth=2, label='Actor Loss Agent 1')
-        ax.plot(self.losses_agent2['actor_loss'], color=color_2, linewidth=2, label='Actor Loss Agent 2')
-        ax.set_title(f'Actor Losses of Both Agents', fontsize=16, fontweight='bold')
-        ax.set_xlabel('Training Steps', fontsize=14)
-        ax.set_ylabel('Loss Value', fontsize=14)
-        ax.grid(True, alpha=0.5)
-        ax.tick_params(axis='both', which='major', labelsize=12)
-        ax.legend(loc='best', fontsize=12, framealpha=0.7, fancybox=True, shadow=True)
-        ax.set_yscale('symlog', linthresh=0.01)
+        plt.plot(self.losses_agent1['actor_loss'], color=color_1, linewidth=2, label='Actor Loss Agent 1')
+        plt.plot(self.losses_agent2['actor_loss'], color=color_2, linewidth=2, label='Actor Loss Agent 2')
+        plt.title('Actor Losses of Both Agents', fontsize=16, fontweight='bold')
+        plt.xlabel('Training Steps', fontsize=14)
+        plt.ylabel('Loss Value', fontsize=14)
+        plt.grid(True, alpha=0.5)
+        plt.tick_params(axis='both', which='major', labelsize=12)
+        plt.legend(loc='best', fontsize=12, framealpha=0.7, fancybox=True, shadow=True)
+        plt.tight_layout()
+        
+        # Save the first figure
+        plt.savefig(os.path.join(self.save_dir_png, 'actor_loss_curves.png'), dpi=300, bbox_inches='tight')
+        plt.close()
 
-        # Plot for critic_loss of agent 1 and agent 2
-        ax = axes[1]
+        # Second figure: Critic losses
+        plt.figure(figsize=(12, 6))
         color_1 = colors[1]
         color_2 = colors[-2]
-        ax.plot(self.losses_agent1['critic_loss'], color=color_1, linewidth=2, label='Critic Loss Agent 1')
-        ax.plot(self.losses_agent2['critic_loss'], color=color_2, linewidth=2, label='Critic Loss Agent 2')
-        ax.set_title(f'Critic Losses of Both Agents', fontsize=16, fontweight='bold')
-        ax.set_xlabel('Training Steps', fontsize=14)
-        ax.grid(True, alpha=0.5)
-        ax.tick_params(axis='both', which='major', labelsize=12)
-        ax.legend(loc='best', fontsize=12, framealpha=0.7, fancybox=True, shadow=True)
-        ax.set_yscale('symlog', linthresh=0.01)
-
-        plt.suptitle('Loss Curves for Both Agents', fontsize=18, fontweight='bold')
-        plt.tight_layout(rect=[0, 0.03, 1, 0.95])
-
-        # Save the figure
-        plt.savefig(os.path.join(self.save_dir_png, 'loss_curves.png'), dpi=300, bbox_inches='tight')
+        plt.plot(self.losses_agent1['critic_loss'], color=color_1, linewidth=2, label='Critic Loss Agent 1')
+        plt.plot(self.losses_agent2['critic_loss'], color=color_2, linewidth=2, label='Critic Loss Agent 2')
+        plt.title('Critic Losses of Both Agents', fontsize=16, fontweight='bold')
+        plt.xlabel('Training Steps', fontsize=14)
+        plt.ylabel('Loss Value', fontsize=14)
+        plt.grid(True, alpha=0.5)
+        plt.tick_params(axis='both', which='major', labelsize=12)
+        plt.legend(loc='best', fontsize=12, framealpha=0.7, fancybox=True, shadow=True)
+        plt.tight_layout()
+        
+        # Save the second figure
+        plt.savefig(os.path.join(self.save_dir_png, 'critic_loss_curves.png'), dpi=300, bbox_inches='tight')
         plt.close()
 
 

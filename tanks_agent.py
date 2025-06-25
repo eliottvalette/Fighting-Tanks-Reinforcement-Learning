@@ -3,10 +3,12 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from tanks_model import ActorModel, CriticModel
+from tanks_no_brain_bot import NoBrainBot
 from collections import namedtuple, deque
 import random
 from tanks_paths import TANK_1_WEIGHTS, TANK_2_WEIGHTS
-
+import time
+import numpy as np
 device = torch.device("mps") if torch.backends.mps.is_available() else torch.device("cpu")
 device = 'cpu'  # Uncomment to force CPU
 
@@ -55,6 +57,9 @@ class TanksAgent:
         self.actor_optimizer = optim.Adam(self.actor.parameters(), lr=self.learning_rate)
         # Use lower learning rate for critic to prevent divergence
         self.critic_optimizer = optim.Adam(self.critic.parameters(), lr=self.learning_rate * 0.1)
+
+        # Create a no brain bot for exploration
+        self.no_brain_bot = NoBrainBot(state_size, action_sizes)
         
         self.short_memory = deque(maxlen=short_memory_size)
         self.long_memory = deque(maxlen=long_memory_size)
@@ -110,15 +115,18 @@ class TanksAgent:
 
         actions = []
         offset = 0
-        
+
         # Process each action type with its corresponding probabilities
         for i, size in enumerate(action_sizes):
             # Extract the probabilities for this action type
             probs = action_probs[0, offset:offset+size]
             
             # Determine action based on probabilities or random choice for exploration
-            if training and random.random() < epsilon:
-                action = random.randint(0, size-1)
+            if random.random() < epsilon:
+                if random.random() < 0.5:
+                    action = self.no_brain_bot.get_action(state)[i]
+                else:
+                    action = random.randint(0, size-1)
             else:
                 # Choose action with respect to the probabilities
                 action = torch.distributions.Categorical(probs).sample().item()
@@ -165,10 +173,11 @@ class TanksAgent:
         batch = random.sample(memory, batch_size)
         states, actions, rewards, next_states, dones = zip(*batch)
 
-        states = torch.FloatTensor(states).to(device)
-        next_states = torch.FloatTensor(next_states).to(device)
-        rewards = torch.FloatTensor(rewards).to(device)
-        dones = torch.FloatTensor(dones).to(device)
+        # Convert tuples to numpy arrays before creating tensors for better performance
+        states = torch.FloatTensor(np.array(states)).to(device)
+        next_states = torch.FloatTensor(np.array(next_states)).to(device)
+        rewards = torch.FloatTensor(np.array(rewards)).to(device)
+        dones = torch.FloatTensor(np.array(dones)).to(device)
         actions_tensor = torch.tensor(actions).to(device)
 
         # Get current policy and value predictions
@@ -206,28 +215,16 @@ class TanksAgent:
             # Get the actions taken for this type
             action_i = actions_tensor[:, i]  # (batch_size, 1) -> [2]
             
-            # Calculate log probabilities of chosen actions
-            log_probs = torch.log(torch.gather(probs, 1, action_i.unsqueeze(1)) + 1e-10) # inside the log, we get the probability of the chosen action than we log it. 
+            # Calculate log probabilities of chosen actions with better numerical stability
+            action_probs_selected = torch.gather(probs, 1, action_i.unsqueeze(1)).squeeze(1)
+            log_probs = torch.log(torch.clamp(action_probs_selected, min=1e-10, max=1.0))
             
             # Policy gradient loss: -log(π(a|s)) * advantage
-            policy_loss -= torch.mean(log_probs.squeeze() * advantages.detach()) # we multiply the log of the probability of the chosen action by the advantage of the action.
+            policy_loss -= torch.mean(log_probs * advantages.detach())
             
-            # --- POLICY LOSS EXPLAINED ---
-            # Case 1 : Bad action with high probability
-            # probs = [0.1, 0.2, 0.7], action_i = [2], log_probs = log(0.7) = 0.30
-            # advantage = -0.5, loss = -0.30 * -0.5 = 0.15 --> during the backprop it will push the actor to lower the prob of that action. 
-
-            # Case 2 : Good action with low probability
-            # probs = [0.1, 0.2, 0.7], action_i = [0], log_probs = log(0.1) = -2.30
-            # advantage = 0.5, loss = -2.30 * 0.5 = -1.15 --> during the backprop it will push the actor to increase the prob of that action. 
-
-            # Case 3 : Good action with high probability
-            # probs = [0.1, 0.2, 0.7], action_i = [0], log_probs = log(0.7) = 0.30
-            # advantage = 0.5, loss = 0.30 * 0.5 = 0.15 --> during the backprop it will push the actor to increase the prob of that action. (but not as much as the other cases)
-
-
             # Entropy loss for exploration: -Σ π(a|s) * log(π(a|s))
-            entropy_i = -torch.mean(torch.sum(probs * torch.log(probs + 1e-10), dim=1)) # we sum the log of the probabilities of all actions and we multiply it by the probability of the action. So, the entropy loss is high when the actions are not uniform.
+            # Use a smaller entropy coefficient to balance with policy loss
+            entropy_i = -torch.mean(torch.sum(probs * torch.log(torch.clamp(probs, min=1e-10, max=1.0)), dim=1))
             entropy_loss += entropy_i
             
             offset += size
@@ -239,6 +236,7 @@ class TanksAgent:
         critic_loss = torch.nn.functional.smooth_l1_loss(chosen_q, td_targets.detach())
 
         # Backpropagation for actor (policy network)
+        # Use entropy coefficient from class initialization
         actor_loss = self.policy_loss_coeff * policy_loss - self.entropy_coeff * entropy_loss
         self.actor_optimizer.zero_grad()
         actor_loss.backward()

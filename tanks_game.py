@@ -342,7 +342,7 @@ class TanksGame:
             [self.normalize(distance_to_opponent, maxs["distance_to_opponent"])],     # (1)
             [self.normalize(distance_to_block, maxs["distance_to_block"])],           # (1)
             [self.normalize(ammo, maxs["ammo"])],                                     # (1)
-            self.normalize(laser_distances, maxs["laser_distances"]),                 # (5)
+            self.normalize(laser_distances, maxs["laser_distances"]),                 # (6)
             [close_left],                                                             # (1)
             [in_sight],                                                               # (1)
             [close_right],                                                            # (1)
@@ -377,12 +377,9 @@ class TanksGame:
         opponent_tank = getattr(self, f'tank_{3 - num_tank}')
         opponent_position = getattr(self, f'position_{3 - num_tank}')
 
-        tank.reward = -1.5  # Base penalty for each step to encourage efficient behavior
+        tank.reward = -0.2
 
         move_action, rotate_action, strafe_action, fire_action = actions
-
-        previous_distance_between = np.linalg.norm(np.array(position) - np.array(opponent_position))
-        previous_angle_to_opponent = abs(self.get_angle_to_opponent(num_tank=num_tank))
         
         # Execute actions
         if move_action == 0:
@@ -403,72 +400,48 @@ class TanksGame:
         if fire_action == 0:
             self.fire_bullet(num_tank)
 
-        new_distance_between = np.linalg.norm(np.array(position) - np.array(opponent_position))
-        new_angle_to_opponent = abs(self.get_angle_to_opponent(num_tank=num_tank))
-
         self.update_bullets()
         self.check_bullet_collisions()
 
         laser_distances = np.array(self.get_all_laser_distances(LASER_MAX_SIZE)[num_tank - 1])
-
-        # Reward for maintaining optimal distance (not too far, not too close)
-        optimal_distance_max = 500  # Pixels
-        optimal_distance_min = 300  # Pixels
-        distance_reward = max(0, 1 - abs(new_distance_between - optimal_distance_max) / optimal_distance_max)
-        tank.reward += distance_reward
-
-        if new_distance_between < previous_distance_between:
-            if new_distance_between > optimal_distance_max:
-                tank.reward += 0.25  
-            else:
-                tank.reward -= 0.25
-        elif new_distance_between > previous_distance_between:
-            if new_distance_between < optimal_distance_min:
-                tank.reward += 0.5
-            else:
-                tank.reward -= 0.5
-
-        # Reward for getting better angle/position compared to previous
-        if abs(new_angle_to_opponent) < abs(previous_angle_to_opponent):
-            tank.reward += 0.1  # Reward for improving angle
-
-        # Reward for line of sight and successful firing strategy
-        if tank.in_line_of_sight:
-            tank.reward += 0.3
-            if fire_action == 0 :  # Reward for firing when ready and in sight
-                tank.reward += 0.6
         
-        if tank.looking_block:
-            tank.reward -= 1.5
-            
-        if fire_action == 0 and not tank.check_cooldown(time.time()):
-            tank.reward -= 0.5
-
-        # Penalties
-        if self.is_head_against_the_wall(laser_distances):
-            tank.reward -= 1  # Increased penalty for being against wall
-
-        # Reward for hitting and penalties for being hit
+        # Sparse rewards for significant events
+        
+        # Reward for hitting opponent
         if opponent_tank.was_hit:
-            tank.reward += 2  # Increased reward for successful hit
+            tank.reward += 5.0  # Significant positive reward
             opponent_tank.was_hit = False
 
+        # Penalty for being hit
         if tank.was_hit:
-            tank.reward -= 2  # Adjusted penalty for being hit
+            tank.reward -= 1.0  # Significant negative reward
             tank.was_hit = False
+            
+        # Small reward for having opponent in line of sight
+        if tank.in_line_of_sight:
+            tank.reward += 0.3
+            
+            # Additional reward for firing when in sight
+            if fire_action == 0 and tank.check_cooldown(time.time()):
+                tank.reward += 0.2
+        
+        # Small penalty for looking at a block
+        if tank.looking_block:
+            tank.reward -= 0.05
+            
+        # Penalty for being against wall
+        if self.is_head_against_the_wall(laser_distances):
+            tank.reward -= 0.5
 
-        # Game end conditions
+        # Game end conditions with large terminal rewards
         if self.lost(tank):
-            tank.reward -= 20  # Increased penalty for losing
+            tank.reward -= 100.0  # Large penalty for losing
             done = True
         elif self.lost(opponent_tank):
-            tank.reward += 20  # Increased reward for winning
+            tank.reward += 100.0  # Large reward for winning
             done = True
-        elif self.current_step > self.max_steps and num_tank == 1:
-            tank.reward -= 20  # Time limit reached
-            done = True
-        elif self.current_step > self.max_steps and num_tank == 2:
-            tank.reward += 20  # Time limit reached
+        elif self.current_step > self.max_steps:
+            tank.reward -= 10.0  # Penalty for timeout
             done = True
         else:
             done = False

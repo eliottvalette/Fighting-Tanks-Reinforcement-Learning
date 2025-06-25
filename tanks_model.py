@@ -27,36 +27,19 @@ class ActorModel(nn.Module):
             nn.Linear(256, 128),
             nn.BatchNorm1d(128),
             nn.GELU(),
+            nn.Linear(128, 52),
+            nn.BatchNorm1d(52),
+            nn.GELU(),
         )
 
         # Advantage stream - split into separate heads for each action type
-        self.movement_stream = nn.Sequential(
-            nn.Linear(128, 52),
-            nn.BatchNorm1d(52),
-            nn.GELU(),
-            nn.Linear(52, action_sizes[0])
-        )
+        self.movement_stream = nn.Linear(52, action_sizes[0])
 
-        self.rotate_stream = nn.Sequential(
-            nn.Linear(128, 52),
-            nn.BatchNorm1d(52),
-            nn.GELU(),
-            nn.Linear(52, action_sizes[1])
-        )
+        self.rotate_stream = nn.Linear(52, action_sizes[1])
 
-        self.strafe_stream = nn.Sequential(
-            nn.Linear(128, 52),
-            nn.BatchNorm1d(52),
-            nn.GELU(),
-            nn.Linear(52, action_sizes[2])
-        )
+        self.strafe_stream = nn.Linear(52, action_sizes[2])
 
-        self.fire_stream = nn.Sequential(
-            nn.Linear(128, 52),
-            nn.BatchNorm1d(52),
-            nn.GELU(),
-            nn.Linear(52, action_sizes[3])
-        )
+        self.fire_stream = nn.Linear(52, action_sizes[3])
 
     def forward(self, state):
         shared_features = self.shared_layers(state)

@@ -14,15 +14,14 @@ from tanks_paths import TANK_1_WEIGHTS, TANK_2_WEIGHTS, TANK_1_SAVE_WEIGHTS, TAN
 
 # Hyperparameters
 EPISODES = 5_000  # Increased to ensure convergence
-GAMMA = 0.80    # Standard discount factor
+GAMMA = 1.0    # Standard discount factor
 ALPHA = 0.0003  # Increased learning rate for faster learning
 GLOBAL_N = 11
 MAX_STEPS = 2000  # Round number
 EPS_DECAY = 0.99  # Slower decay for better exploration
 STATE_SIZE = 30 + 1 # +1 for Value
-SHORT_MEMORY_SIZE = MAX_STEPS // 2
+SHORT_MEMORY_SIZE = MAX_STEPS * 3
 LONG_MEMORY_SIZE = 10000
-LONG_MEMORY_UPDATE_FREQUENCY = 100
 OFF_POLICY_TRAINING = False
 LOAD_MODEL = True
 
@@ -48,7 +47,6 @@ def run_episode(agent_1 : TanksAgent, agent_2 : TanksAgent, epsilon, rendering, 
     episode_actions = []
     episode_values = []
     step_count = 0
-    long_memory_episode_delay = rd.randint(0, LONG_MEMORY_UPDATE_FREQUENCY) # So that it's not always the same episode (+ periodic update) that is saved
 
     print(f'long_memory_length : {len(agent_1.long_memory)}, short_memory_length : {len(agent_1.short_memory)}')
 
@@ -59,8 +57,6 @@ def run_episode(agent_1 : TanksAgent, agent_2 : TanksAgent, epsilon, rendering, 
         actions_1 = agent_1.get_action(state=state_1, epsilon=epsilon, action_sizes=agent_1.action_sizes)
         next_state_1, reward_1, done, _ = env.step(actions_1, num_tank=1)
         agent_1.remember_short(state_1, actions_1, reward_1, next_state_1, done)
-        if (step_count + long_memory_episode_delay) % LONG_MEMORY_UPDATE_FREQUENCY == 0 and OFF_POLICY_TRAINING:
-            agent_1.remember_long(state_1, actions_1, reward_1, next_state_1, done)
 
         # Collect actions for visualization
         episode_actions.append(actions_1)
@@ -78,8 +74,6 @@ def run_episode(agent_1 : TanksAgent, agent_2 : TanksAgent, epsilon, rendering, 
         actions_2 = agent_2.get_action(state_2, epsilon=epsilon, action_sizes=agent_2.action_sizes)
         next_state_2, reward_2, done, _ = env.step(actions_2, num_tank=2)
         agent_2.remember_short(state_2, actions_2, reward_2, next_state_2, done)
-        if (step_count + long_memory_episode_delay) % LONG_MEMORY_UPDATE_FREQUENCY == 0 and OFF_POLICY_TRAINING:
-            agent_2.remember_long(state_2, actions_2, reward_2, next_state_2, done)
 
         # Collect actions for visualization
         episode_actions.append(actions_2)
@@ -103,8 +97,8 @@ def run_episode(agent_1 : TanksAgent, agent_2 : TanksAgent, epsilon, rendering, 
             env.render(rendering=True, clock=60, epsilon=epsilon)  # Reduced clock speed for better visualization
 
     # Additional batch training at the end of the episode
-    losses_1 = agent_1.train_model_batch(batch_size=32, short_memory = not OFF_POLICY_TRAINING)
-    losses_2 = agent_2.train_model_batch(batch_size=32, short_memory = not OFF_POLICY_TRAINING)
+    losses_1 = agent_1.train_model_batch(batch_size=32, short_memory = True)
+    losses_2 = agent_2.train_model_batch(batch_size=32, short_memory = True)
     
     # Record metrics if visualizer is provided
     if visualizer:
@@ -180,7 +174,7 @@ if __name__ == "__main__":
     # Set agent identity for loading models
     agent_1.is_agent_1 = True
 
-    agent_2 = TanksAgent(
+    """agent_2 = TanksAgent(
         state_size=STATE_SIZE,
         action_sizes=[3, 3, 3, 2], # [move, rotate, strafe, fire]
         gamma=GAMMA,
@@ -190,7 +184,9 @@ if __name__ == "__main__":
         load_model=LOAD_MODEL,
         short_memory_size=SHORT_MEMORY_SIZE,
         long_memory_size=LONG_MEMORY_SIZE,
-    )
+    )"""
+
+    agent_2 = NoBrainBot(state_size=STATE_SIZE, action_sizes=[3, 3, 3, 2])
 
     # Start the training loop
     main_training_loop(agent_1, agent_2, episodes=EPISODES, rendering=RENDERING, render_every=1)
