@@ -32,7 +32,7 @@ class TanksAgent:
            – **Critic**: MSE(Q(s,a), td)  
         4. Two independent Adam optimisers update θ and ϕ.
     """
-    def __init__(self, state_size, action_sizes, gamma, learning_rate, short_memory_size, long_memory_size, entropy_coeff=0.01, policy_loss_coeff=1.0, load_model=False):
+    def __init__(self, state_size, action_sizes, gamma, learning_rate, short_memory_size, long_memory_size, entropy_coeff=0.05, policy_loss_coeff=1.0, load_model=False):
         self.state_size = state_size
         self.action_sizes = action_sizes
         self.gamma = gamma
@@ -59,7 +59,7 @@ class TanksAgent:
         self.critic_optimizer = optim.Adam(self.critic.parameters(), lr=self.learning_rate * 0.1)
 
         # Create a no brain bot for exploration
-        self.no_brain_bot = NoBrainBot(state_size, action_sizes)
+        self.no_brain_bot = NoBrainBot(state_size, action_sizes, agent_1=self.is_agent_1)
         
         self.short_memory = deque(maxlen=short_memory_size)
         self.long_memory = deque(maxlen=long_memory_size)
@@ -113,28 +113,21 @@ class TanksAgent:
             action_probs = self.actor(state_tensor)
         self.actor.train()
 
-        actions = []
-        offset = 0
-
-        # Process each action type with its corresponding probabilities
-        for i, size in enumerate(action_sizes):
-            # Extract the probabilities for this action type
-            probs = action_probs[0, offset:offset+size]
-            
-            # Determine action based on probabilities or random choice for exploration
-            if random.random() < epsilon:
-                if random.random() < 0.5:
-                    action = self.no_brain_bot.get_action(state)[i]
-                else:
-                    action = random.randint(0, size-1)
+        # Determine action based on probabilities or random choice for exploration
+        if random.random() < epsilon:
+            if random.random() < 0.8:
+                # Use no_brain_bot for more intelligent exploration
+                return self.no_brain_bot.get_action(state)
             else:
-                # Choose action with respect to the probabilities
-                action = torch.distributions.Categorical(probs).sample().item()
-                
-            actions.append(action)
-            offset += size
-            
-        return actions
+                # Random action index
+                action_idx = random.randint(0, self.actor.n_combinations - 1)
+                # Convert to individual actions
+                return self.actor.decode_action(action_idx)
+        else:
+            # Choose action with highest probability
+            action_idx = torch.argmax(action_probs[0]).item()
+            # Convert to individual actions
+            return self.actor.decode_action(action_idx)
 
     def remember_short(self, state, actions, reward, next_state, done):
         self.short_memory.append((state, actions, reward, next_state, done))
@@ -189,13 +182,13 @@ class TanksAgent:
             q_next, _ = self.target_critic(next_states)           # Q_target(s',*) => (batch_size, 54)
             next_state_values = q_next.max(dim=1).values   # max_a' Q_target(s',a') => (batch_size, 1)
 
-        # Get Q-value for the chosen action combination (no more averaging!)
+        # Get Q-value for the chosen action combination
         combo_idx = self.critic.get_action_combination_index(actions_tensor)
         chosen_q = q_values.gather(1, combo_idx.unsqueeze(1)).squeeze(1)  # (batch_size,)
 
         # Compute TD targets and advantages
         td_targets = rewards + self.gamma * next_state_values * (1 - dones) # td_target = r + γ·maxₐ′ Q_target(s′, a′)
-        advantages = chosen_q.detach() - state_values      # A = Q - V Positive means the action is better than expected.
+        advantages = chosen_q - state_values.detach()      # A = Q - V Positive means the action is better than expected.
 
         if random.random() < 0.001:
             print(f'state_values, mean : {state_values.mean()}, max : {state_values.max()}, min : {state_values.min()}')
@@ -203,31 +196,16 @@ class TanksAgent:
             print(f'next_state_values, mean : {next_state_values.mean()}, max : {next_state_values.max()}, min : {next_state_values.min()}')
             print(f'advantages, mean : {advantages.mean()}, max : {advantages.max()}, min : {advantages.min()}')
 
-        # Policy loss - handle each action type separately
-        policy_loss = 0
-        entropy_loss = 0
-        offset = 0
+        # Policy loss - use the same indices to get the probabilities of chosen actions
+        # Get log probabilities of chosen actions with better numerical stability
+        action_probs_selected = torch.gather(action_probs, 1, combo_idx.unsqueeze(1)).squeeze(1)
+        log_probs = torch.log(torch.clamp(action_probs_selected, min=1e-10, max=1.0))
         
-        for i, size in enumerate(self.action_sizes):
-            # Extract probabilities for this action type
-            probs = action_probs[:, offset:offset+size]  # (batch_size, 3) -> [0.1, 0.2, 0.7]
-            
-            # Get the actions taken for this type
-            action_i = actions_tensor[:, i]  # (batch_size, 1) -> [2]
-            
-            # Calculate log probabilities of chosen actions with better numerical stability
-            action_probs_selected = torch.gather(probs, 1, action_i.unsqueeze(1)).squeeze(1)
-            log_probs = torch.log(torch.clamp(action_probs_selected, min=1e-10, max=1.0))
-            
-            # Policy gradient loss: -log(π(a|s)) * advantage
-            policy_loss -= torch.mean(log_probs * advantages.detach())
-            
-            # Entropy loss for exploration: -Σ π(a|s) * log(π(a|s))
-            # Use a smaller entropy coefficient to balance with policy loss
-            entropy_i = -torch.mean(torch.sum(probs * torch.log(torch.clamp(probs, min=1e-10, max=1.0)), dim=1))
-            entropy_loss += entropy_i
-            
-            offset += size
+        # Policy gradient loss: -log(π(a|s)) * advantage
+        policy_loss = -torch.mean(log_probs * advantages)
+        
+        # Entropy loss for exploration: -Σ π(a|s) * log(π(a|s))
+        entropy = -torch.mean(torch.sum(action_probs * torch.log(torch.clamp(action_probs, min=1e-10, max=1.0)), dim=1))
 
         # Critic loss : Huber(Q(s,a), td_target) - more robust to outliers than MSE
         td_error = td_targets.detach() - chosen_q
@@ -237,16 +215,16 @@ class TanksAgent:
 
         # Backpropagation for actor (policy network)
         # Use entropy coefficient from class initialization
-        actor_loss = self.policy_loss_coeff * policy_loss - self.entropy_coeff * entropy_loss
+        actor_loss = self.policy_loss_coeff * policy_loss - self.entropy_coeff * entropy
         self.actor_optimizer.zero_grad()
-        actor_loss.backward()
-        nn.utils.clip_grad_norm_(self.actor.parameters(), max_norm=1.0)
+        actor_loss.backward(retain_graph=True)
+        # nn.utils.clip_grad_norm_(self.actor.parameters(), max_norm=1.0)
         self.actor_optimizer.step()
         
         # Backpropagation for critic (value network)
         self.critic_optimizer.zero_grad()
         critic_loss.backward()
-        nn.utils.clip_grad_norm_(self.critic.parameters(), max_norm=1.0)
+        # nn.utils.clip_grad_norm_(self.critic.parameters(), max_norm=1.0)
         self.critic_optimizer.step()
         
         # Update target network with polyak averaging

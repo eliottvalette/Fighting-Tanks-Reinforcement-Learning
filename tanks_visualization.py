@@ -230,8 +230,7 @@ class TrainingVisualizer:
         action_counts = {
             0: [0, 0, 0],  # Move: [forward, backward, none]
             1: [0, 0, 0],  # Rotate: [right, left, none]
-            2: [0, 0, 0],  # Strafe: [left, right, none]
-            3: [0, 0]      # Fire: [fire, don't fire]
+            2: [0, 0]      # Fire: [fire, don't fire]
         }
         
         # Process all episodes' actions
@@ -239,27 +238,46 @@ class TrainingVisualizer:
             for action in episode_actions:
                 # Count each action type
                 for i, action_value in enumerate(action):
-                    if i == 3:  # Fire action has only 2 possible values
-                        action_counts[i][action_value] += 1
-                    else:
+                    if i < len(action_counts) and action_value < len(action_counts[i]):
                         action_counts[i][action_value] += 1
                         
         # Plot distributions
-        action_types = ["Move", "Rotate", "Strafe", "Fire"]
-        fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+        action_types = ["Move", "Rotate", "Fire"]
+        fig, axes = plt.subplots(1, 3, figsize=(18, 6))
         axes = axes.flatten()
         
         for i, action_type in enumerate(action_types):
+            if i >= len(action_counts):
+                continue
+                
             counts = action_counts[i]
-            if i < 3:
+            
+            # Make sure counts contains valid values
+            if sum(counts) == 0:
+                print(f"Warning: No data for {action_type} actions, skipping pie chart")
+                continue
+                
+            # Check for NaN values
+            if any(np.isnan(count) for count in counts):
+                print(f"Warning: NaN values found in {action_type} counts, skipping pie chart")
+                continue
+                
+            if i < 2:  # Move and Rotate
                 labels = ['Forward/Right', 'Backward/Left', 'No Action']
-            else:
+                if len(counts) < len(labels):
+                    labels = labels[:len(counts)]
+            else:  # Fire
                 labels = ['Fire', 'No Fire']
+                if len(counts) < len(labels):
+                    labels = labels[:len(counts)]
                 
             # Plot pie chart
-            axes[i].pie(counts, labels=labels, autopct='%1.1f%%', startangle=90)
-            axes[i].set_title(f'{action_type} Action Distribution')
-            
+            try:
+                axes[i].pie(counts, labels=labels, autopct='%1.1f%%', startangle=90)
+                axes[i].set_title(f'{action_type} Action Distribution')
+            except Exception as e:
+                print(f"Error creating pie chart for {action_type}: {e}")
+        
         plt.tight_layout()
         plt.savefig(os.path.join(self.save_dir_png, 'action_distribution.png'), dpi=300, bbox_inches='tight')
         plt.close()

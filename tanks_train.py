@@ -18,11 +18,11 @@ GAMMA = 1.0    # Standard discount factor
 ALPHA = 0.0003  # Increased learning rate for faster learning
 GLOBAL_N = 11
 MAX_STEPS = 2000  # Round number
-EPS_DECAY = 0.99  # Slower decay for better exploration
-STATE_SIZE = 30 + 1 # +1 for Value
+EPS_DECAY = 0.98  # Slower decay for better exploration
+STATE_SIZE = 32 + 1 # +1 for Value
 SHORT_MEMORY_SIZE = MAX_STEPS * 3
 LONG_MEMORY_SIZE = 10000
-OFF_POLICY_TRAINING = False
+TRAINING_FREQUENCY = 50
 LOAD_MODEL = True
 
 def set_seed(seed=42):
@@ -90,15 +90,16 @@ def run_episode(agent_1 : TanksAgent, agent_2 : TanksAgent, epsilon, rendering, 
         total_reward_2 += reward_2
 
         # Train the agent with online single-step updates
-        agent_1.train_model_batch(batch_size=64, short_memory = True)
-        agent_2.train_model_batch(batch_size=64, short_memory = True)
+        if step_count % TRAINING_FREQUENCY == 0:
+            agent_1.train_model_batch(batch_size=64, short_memory = True)
+            agent_2.train_model_batch(batch_size=64, short_memory = True)
 
         if rendering and (episode % render_every == 0):
-            env.render(rendering=True, clock=60, epsilon=epsilon)  # Reduced clock speed for better visualization
+            env.render(rendering=True, clock=2000, epsilon=epsilon)  # Reduced clock speed for better visualization
 
     # Additional batch training at the end of the episode
-    losses_1 = agent_1.train_model_batch(batch_size=32, short_memory = True)
-    losses_2 = agent_2.train_model_batch(batch_size=32, short_memory = True)
+    losses_1 = agent_1.train_model_batch(batch_size=64, short_memory = True)
+    losses_2 = agent_2.train_model_batch(batch_size=64, short_memory = True)
     
     # Record metrics if visualizer is provided
     if visualizer:
@@ -116,7 +117,7 @@ def main_training_loop(agent_1, agent_2, episodes, rendering, render_every=10):
     
     try:
         for episode in range(episodes):
-            epsilon = max(0.05, 0.5 * (EPS_DECAY ** episode))  # Better epsilon annealing schedule
+            epsilon = max(0.01, 0.95 * (EPS_DECAY ** episode))  # Better epsilon annealing schedule
             
             total_reward_1, total_reward_2, steps = run_episode(
                 agent_1, agent_2, epsilon, rendering, episode, render_every, visualizer
@@ -162,7 +163,7 @@ if __name__ == "__main__":
     # Create the Q-learning agent
     agent_1 = TanksAgent(
         state_size=STATE_SIZE,
-        action_sizes=[3, 3, 3, 2], # [move, rotate, strafe, fire]
+        action_sizes=[3, 3, 2], # [move, rotate, fire]
         gamma=GAMMA,
         learning_rate=ALPHA,
         entropy_coeff=0.01,  # Decreased for more exploitation
@@ -174,9 +175,9 @@ if __name__ == "__main__":
     # Set agent identity for loading models
     agent_1.is_agent_1 = True
 
-    """agent_2 = TanksAgent(
+    agent_2 = TanksAgent(
         state_size=STATE_SIZE,
-        action_sizes=[3, 3, 3, 2], # [move, rotate, strafe, fire]
+        action_sizes=[3, 3, 2], # [move, rotate, fire]
         gamma=GAMMA,
         learning_rate=ALPHA,
         entropy_coeff=0.01,  # Decreased for more exploitation
@@ -184,9 +185,11 @@ if __name__ == "__main__":
         load_model=LOAD_MODEL,
         short_memory_size=SHORT_MEMORY_SIZE,
         long_memory_size=LONG_MEMORY_SIZE,
-    )"""
-
-    agent_2 = NoBrainBot(state_size=STATE_SIZE, action_sizes=[3, 3, 3, 2])
+    )
+    
+    """
+    agent_2 = NoBrainBot(state_size=STATE_SIZE, action_sizes=[3, 3, 2], agent_1=False)
+    """
 
     # Start the training loop
     main_training_loop(agent_1, agent_2, episodes=EPISODES, rendering=RENDERING, render_every=1)

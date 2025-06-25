@@ -1,11 +1,14 @@
 import torch
+import random
+
 SCREEN_WIDTH = 1000
 SCREEN_HEIGHT = 700
 
 class NoBrainBot():
-    def __init__(self, state_size, action_sizes):
+    def __init__(self, state_size, action_sizes, agent_1 = False):
         self.state_size = state_size
         self.action_sizes = action_sizes
+        self.is_agent_1 = agent_1
         self.critic = DummyCritic()
     
     def get_action(self, state, epsilon = 0.0, action_sizes = None):
@@ -37,10 +40,9 @@ class NoBrainBot():
             [looking_block],
         ])
 
-        4 actions will be taken:
+        3 actions will be taken:
         - move_action: 3 values (0, 1, 2)
         - rotate_action: 3 values (0, 1, 2)
-        - strafe_action: 3 values (0, 1, 2)
         - fire_action: 2 values (0, 1)    
         '''
 
@@ -73,16 +75,13 @@ class NoBrainBot():
 
         # Strafe action: avoid walls and obstacles
         if head_on_wall or looking_block:
-            strafe_action = 1  # Strafe right to avoid
-            rotate_action = 0  # Turn right
+            rotate_action = 1 if self.is_agent_1 else 0  # Turn right
             move_action = 0    # Forward
-        else:
-            strafe_action = 2  # Don't strafe
 
         # Fire action: if opponent in sight and we have ammo, fire
-        fire_action = 1
+        fire_action = random.random() < 0.003
 
-        return [move_action, rotate_action, strafe_action, fire_action]
+        return [move_action, rotate_action, fire_action]
     
     def remember_short(self, state, actions, reward, next_state, done):
         pass

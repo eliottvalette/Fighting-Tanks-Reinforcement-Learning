@@ -37,7 +37,8 @@ class TanksGame:
         self.position_2 = [SCREEN_WIDTH - 100, rd.randint(100, SCREEN_HEIGHT - 100)]
         self.tank_2 = TankPlayer(image_file=TANK_2_IMAGE, location=self.position_2, width=TANK_SIZE, speed=TANK_2_SPEED, rendering=RENDERING)
         self.tank_2.rotate(-180)
-        self.tank_1.number_of_ammo = 0
+        self.tank_1.number_of_ammo = 1000
+        self.tank_2.number_of_ammo = 1000
 
         self.last_laser_update = time.time()
         self.laser_update_interval = 0.1  # Adjust this interval based on your needs
@@ -54,6 +55,8 @@ class TanksGame:
         self.tank_1_block_looking_steps = 0
         self.tank_2_block_looking_steps = 0
 
+        self.cooldown_1 = 0
+        self.cooldown_2 = 0
 
     def reset(self):
         self.position_1 = [100, rd.randint(100, SCREEN_HEIGHT - 100)]
@@ -70,7 +73,11 @@ class TanksGame:
         self.tank_1_block_looking_steps = 0
         self.tank_2_block_looking_steps = 0
 
+        self.tank_1.cooldown = 0
+        self.tank_2.cooldown = 0
 
+        self.tank_1.number_of_ammo = 1000
+        self.tank_2.number_of_ammo = 1000
         
     def rotate_tank(self, num_tank, rotation_direction):
         direction_of_rotation = -1 if rotation_direction == 'right' else 1
@@ -90,14 +97,6 @@ class TanksGame:
         position = getattr(self, f'position_{num_tank}')
         position[0] += dx
         position[1] += dy
-
-    def strafe_left(self, num_tank):
-        dx, dy = self.calculate_movement(num_tank, angle_offset=90, slowdown=0.3)
-        self.move(num_tank, dx, dy)
-
-    def strafe_right(self, num_tank):
-        dx, dy = self.calculate_movement(num_tank, angle_offset=-90, slowdown=0.3)
-        self.move(num_tank, dx, dy)
 
     def move_forward(self, num_tank):
         dx, dy = self.calculate_movement(num_tank)
@@ -141,9 +140,7 @@ class TanksGame:
         tank = getattr(self, f'tank_{num_tank}')
         position = getattr(self, f'position_{num_tank}')
         x, y = position
-
-        current_time = time.time()
-        if tank.health > 0 and tank.number_of_ammo > 0 and tank.check_cooldown(current_time):
+        if tank.health > 0 and tank.number_of_ammo > 0 and tank.cooldown == 0:
             bullet = Bullet(
                 image_file=BULLET_IMAGE,
                 location=(x, y),
@@ -156,7 +153,7 @@ class TanksGame:
             )
             tank.number_of_ammo -= 1
             tank.bullets.add(bullet) if RENDERING else tank.bullets.append(bullet)
-            tank.cooldown = current_time
+            tank.cooldown = 80 # 80 frames
 
     def check_bullet_collisions(self):
         for i, tank in enumerate([self.tank_1, self.tank_2]):
@@ -184,7 +181,7 @@ class TanksGame:
     def handle_collision(self, bullet, tank, num_tank):
         tank.health -= BULLET_DAMAGE
         bullet.kill()
-        tank.was_hit = True
+        tank.was_hit = 2 # it's 2 because it will be counted 2 times during the step of the agent 1 and 2, at each step we'll apply -1
         print(f"Tank {num_tank} was hit!")
 
     def cast_laser(self, direction, max_distance, num_tank):
@@ -194,7 +191,7 @@ class TanksGame:
         x, y = position
         angle_rad = math.radians(direction)
 
-        for distance in range(1, max_distance + 1, 5):  # Use approximation of 5
+        for distance in range(1, max_distance + 1, 15):  # Use approximation of 5
             ray_x = x + distance * math.cos(angle_rad)
             ray_y = y + distance * math.sin(angle_rad)
 
@@ -314,12 +311,15 @@ class TanksGame:
         opponent_health, opponent_direction = opponent_tank.health, opponent_tank.direction
         relative_angle_toward_opponent = self.get_angle_to_opponent(num_tank)
         ammo, in_sight = tank.number_of_ammo, tank.in_line_of_sight
-        close_right, close_left, is_reloaded = tank.on_close_right, tank.on_close_left, tank.check_cooldown(time.time())
+        close_right, close_left, is_reloaded = tank.on_close_right, tank.on_close_left, tank.cooldown == 0
         looking_block = tank.looking_block
 
         distance_to_opponent = np.sqrt((opponent_position[0] - position[0])**2 + (opponent_position[1] - position[1])**2)
         block_center = self.middle_block.rect.center
         distance_to_block = np.sqrt((position[0] - block_center[0])**2 + (position[1] - block_center[1])**2)
+
+        tank_above_block = position[1] < (self.middle_block.rect.top + tank.height)
+        tank_below_block = position[1] > (self.middle_block.rect.bottom - tank.height)
 
         relative_position = np.array([opponent_position[0] - position[0], opponent_position[1] - position[1]])
         angle_rad = -math.radians(direction)
@@ -348,7 +348,9 @@ class TanksGame:
             [close_right],                                                            # (1)
             [is_reloaded],                                                            # (1)
             [head_on_wall],                                                           # (1)
-            [looking_block],
+            [looking_block],                                                          # (1)
+            [tank_above_block],                                                       # (1)
+            [tank_below_block],                                                       # (1)
         ])
 
         # ----- TOKENIZATION -----
@@ -377,9 +379,15 @@ class TanksGame:
         opponent_tank = getattr(self, f'tank_{3 - num_tank}')
         opponent_position = getattr(self, f'position_{3 - num_tank}')
 
-        tank.reward = -0.2
+        # Decrement cooldown for both tanks
+        if self.tank_1.cooldown > 0:
+            self.tank_1.cooldown -= 1
+        if self.tank_2.cooldown > 0:
+            self.tank_2.cooldown -= 1
 
-        move_action, rotate_action, strafe_action, fire_action = actions
+        tank.reward = -0.01
+
+        move_action, rotate_action, fire_action = actions
         
         # Execute actions
         if move_action == 0:
@@ -391,11 +399,6 @@ class TanksGame:
             self.rotate_tank(num_tank, rotation_direction='right')
         elif rotate_action == 1:
             self.rotate_tank(num_tank, rotation_direction='left')
-        
-        if strafe_action == 0:
-            self.strafe_left(num_tank)
-        elif strafe_action == 1:
-            self.strafe_right(num_tank)
 
         if fire_action == 0:
             self.fire_bullet(num_tank)
@@ -408,22 +411,22 @@ class TanksGame:
         # Sparse rewards for significant events
         
         # Reward for hitting opponent
-        if opponent_tank.was_hit:
-            tank.reward += 5.0  # Significant positive reward
-            opponent_tank.was_hit = False
+        if opponent_tank.was_hit > 0:
+            tank.reward += 50.0  # Significant positive reward
+            opponent_tank.was_hit -= 1
 
         # Penalty for being hit
-        if tank.was_hit:
-            tank.reward -= 1.0  # Significant negative reward
-            tank.was_hit = False
+        if tank.was_hit > 0:
+            tank.reward -= 20.0  # Significant negative reward
+            tank.was_hit -= 1
             
         # Small reward for having opponent in line of sight
         if tank.in_line_of_sight:
-            tank.reward += 0.3
+            tank.reward += 0.1
             
             # Additional reward for firing when in sight
-            if fire_action == 0 and tank.check_cooldown(time.time()):
-                tank.reward += 0.2
+            if fire_action == 0 and tank.cooldown == 0:
+                tank.reward += 2
         
         # Small penalty for looking at a block
         if tank.looking_block:
@@ -435,13 +438,13 @@ class TanksGame:
 
         # Game end conditions with large terminal rewards
         if self.lost(tank):
-            tank.reward -= 100.0  # Large penalty for losing
+            tank.reward -= 300.0  # Large penalty for losing
             done = True
         elif self.lost(opponent_tank):
-            tank.reward += 100.0  # Large reward for winning
+            tank.reward += 300.0  # Large reward for winning
             done = True
         elif self.current_step > self.max_steps:
-            tank.reward -= 10.0  # Penalty for timeout
+            tank.reward -= 300.0  # Penalty for timeout
             done = True
         else:
             done = False
@@ -599,10 +602,6 @@ if __name__ == "__main__":
         previous_angle_2 = abs(game.get_angle_to_opponent(num_tank=2))
 
         # first Player
-        if keys[pygame.K_q]:
-            game.strafe_left(num_tank = 1)
-        if keys[pygame.K_d]:
-            game.strafe_right(num_tank = 1)
         if keys[pygame.K_z]:
             game.move_forward(num_tank = 1)
         if keys[pygame.K_s]:
@@ -614,10 +613,6 @@ if __name__ == "__main__":
         if keys[pygame.K_f]:
             game.fire_bullet(num_tank = 1)
         # second one
-        if keys[pygame.K_LEFT]:
-            game.strafe_left(num_tank = 2)
-        if keys[pygame.K_RIGHT]:
-            game.strafe_right(num_tank = 2)
         if keys[pygame.K_UP]:
             game.move_forward(num_tank = 2)
         if keys[pygame.K_DOWN]:
@@ -697,63 +692,32 @@ if __name__ == "__main__":
             new_angle = new_angle_2 if i == 1 else new_angle_1
             
             # Base penalty for each frame
-            tank.reward = -0.05  # Changed from -0.1 to match step method
-            
-            # Reward for maintaining optimal distance (not too far, not too close)
-            optimal_distance_max = 500  # Pixels
-            optimal_distance_min = 300  # Pixels
-            distance_reward = max(0, 1 - abs(new_distance - optimal_distance_max) / optimal_distance_max)
-            tank.reward += distance_reward
+            tank.reward = -0.01  # Changed from -0.1 to match step method
 
-            # Changed values to match step method (0.5 -> 0.25, etc.)
-            if new_distance < previous_distance:
-                if new_distance > optimal_distance_max:
-                    tank.reward += 0.25
-                else:
-                    tank.reward -= 0.25
-            elif new_distance > previous_distance:
-                if new_distance < optimal_distance_min:
-                    tank.reward += 0.5
-                else:
-                    tank.reward -= 0.5
-            
-            # Reward for getting better angle/position compared to previous
-            if new_angle < previous_angle:
-                tank.reward += 0.1  # Changed from 0.2 to match step method
+            # Reward for hitting opponent
+            if opponent_tank.was_hit > 0:
+                print('opponent_tank.was_hit : ', opponent_tank.was_hit)
+                tank.reward += 50.0  # Significant positive reward
+                opponent_tank.was_hit -= 1
+
+            # Penalty for being hit
+            if tank.was_hit > 0:
+                print('tank.was_hit : ', tank.was_hit)
+                tank.reward -= 20.0  # Significant negative reward
+                tank.was_hit -= 1
                 
-            # Reward for line of sight and successful firing strategy
+            # Small reward for having opponent in line of sight
             if tank.in_line_of_sight:
-                tank.reward += 0.3  # Changed from 2.0 to match step method
-                # Check if fire key was pressed for this tank
-                if (num_tank == 1 and keys[pygame.K_f]) or (num_tank == 2 and keys[pygame.K_k]):
-                    tank.reward += 0.6  # Added firing reward when in sight
+                tank.reward += 0.1
             
+            # Small penalty for looking at a block
             if tank.looking_block:
-                tank.reward -= 1.5  # Added looking at block penalty
+                tank.reward -= 0.05
                 
-            # Check if fired but not ready
-            if ((num_tank == 1 and keys[pygame.K_f]) or (num_tank == 2 and keys[pygame.K_k])) and not tank.check_cooldown(time.time()):
-                tank.reward -= 0.5  # Added penalty for firing when not ready
-                
-            # Penalties for being against wall
-            laser_distances = np.array(game.get_all_laser_distances(LASER_MAX_SIZE)[num_tank - 1])
-            if game.is_head_against_the_wall(laser_distances):
-                tank.reward -= 1  # Changed from -3 to match step method
-                
-            # Reward for hitting and penalties for being hit
-            if opponent_tank.was_hit:
-                tank.reward += 2  # Added reward for successful hit
-                opponent_tank.was_hit = False
-
-            if tank.was_hit:
-                tank.reward -= 2  # Added penalty for being hit
-                tank.was_hit = False
-                
-            # Game end conditions
-            if game.lost(tank):
-                tank.reward -= 20  # Added penalty for losing
-            elif game.lost(opponent_tank):
-                tank.reward += 20  # Added reward for winning
+            # Penalty for being against wall
+            laser_distances = game.get_all_laser_distances(max_distance=LASER_MAX_SIZE)
+            if game.is_head_against_the_wall(laser_distances[i]):
+                tank.reward -= 0.5
                 
             # Update total reward
             tank.total_reward += tank.reward
@@ -764,6 +728,11 @@ if __name__ == "__main__":
             game.tank_2.total_reward = 0
 
         # Render everything
-        game.render(rendering=True, clock=300)
+        game.render(rendering=True, clock=2000)
+
+        if game.tank_1.cooldown > 0:
+            game.tank_1.cooldown -= 1
+        if game.tank_2.cooldown > 0:
+            game.tank_2.cooldown -= 1
 
         pygame.display.flip()

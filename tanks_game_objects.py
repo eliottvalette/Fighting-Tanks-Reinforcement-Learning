@@ -39,7 +39,7 @@ class TankPlayer:
             self.rect = Rect(left=location[0] - self.width // 2, top=location[1] - self.height // 2, width=self.width, height=self.height)
         self.direction = 0
         self.speed = speed
-        self.cooldown = time.time()
+        self.cooldown = 0  # Initialize cooldown as frames counter
         self.bullets = pygame.sprite.Group() if self.rendering else []
         self.in_line_of_sight = False
         self.on_close_right = False
@@ -58,9 +58,6 @@ class TankPlayer:
             self.image = pygame.transform.rotate(self.original_image, self.direction)
             self.rect = self.image.get_rect(center=self.rect.center)
     
-    def check_cooldown(self, current_time):
-        return current_time - self.cooldown > BULLET_COOLDOWN_TIME
-    
 class Bullet(pygame.sprite.Sprite if RENDERING else object):
     def __init__(self, image_file, location, direction, width, screen_dims, rendering, game_instance, block=None):
         if rendering:
@@ -68,8 +65,8 @@ class Bullet(pygame.sprite.Sprite if RENDERING else object):
         self.rendering = rendering
         self.game_instance = game_instance  # Store reference to the game instance
         self.location = np.array(location)
-        self.width = int(2.5 * width)
-        self.height = width
+        self.width = int(1.5 * width)
+        self.height = int(0.30 * width)
         self.direction = direction
         self.speed = BULLET_SPEED
         self.screen_dims = screen_dims
