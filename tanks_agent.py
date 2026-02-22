@@ -180,7 +180,7 @@ class TanksAgent:
         # Compute next state values using target network for stability
         with torch.no_grad():
             q_next, _ = self.target_critic(next_states)           # Q_target(s',*) => (batch_size, 54)
-            next_state_values = q_next.max(dim=1).values   # max_a' Q_target(s',a') => (batch_size, 1)
+            next_state_values = q_next.max(dim=1).values          # max_a' Q_target(s',a') => (batch_size, 1)
 
         # Get Q-value for the chosen action combination
         combo_idx = self.critic.get_action_combination_index(actions_tensor)

@@ -74,7 +74,7 @@ class CriticModel(nn.Module):
     Dueling Q-network for composite actions:
         • branche partagée  → h
         • tête V(s)         → (batch,1)
-        • tête A(s,a)       → (batch, 54) - one for each action combination
+        • tête A(s,a)       → (batch, 18) - one for each action combination
         • Q(s,a)=V+A-mean(A)
         
     Action combinations: 3×3×2 = 18 total combinations
